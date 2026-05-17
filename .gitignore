@@ -7,7 +7,6 @@
 /coverage
 /test/logs/*.md
 /test/logs/*.json
-test/
 
 # notes
 notes.md
