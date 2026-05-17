@@ -231,3 +231,54 @@ describe("pulse + item CRUD", () => {
     db.close();
   });
 });
+
+import { addFeedback, getRecentFeedback } from "./db";
+
+describe("feedback", () => {
+  function bootstrap() {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "pulse-fb-"));
+    const db = openDb(path.join(dir, "pulse.db"));
+    migrate(db);
+    const pid = createPulse(db, {
+      generated_at: "2026-05-18T07:00:00Z",
+      date_key: "2026-05-18",
+      item_count: 0,
+      status: "ok",
+    });
+    const iid = insertPulseItem(db, {
+      pulse_id: pid,
+      rank: 1,
+      source: "paper",
+      priority: "high",
+      match_score: 5,
+      complexity: "advanced",
+      read_minutes: 8,
+      title: "Item",
+      url: "https://example.com/1",
+      outlet: "arXiv",
+      summary: "...",
+      topics: ["moe"],
+      source_meta: {},
+      created_at: "2026-05-18T07:00:01Z",
+    });
+    return { db, iid };
+  }
+
+  it("inserts a feedback row", () => {
+    const { db, iid } = bootstrap();
+    const id = addFeedback(db, { item_id: iid, action: "like", created_at: "2026-05-18T08:00:00Z" });
+    expect(id).toBeGreaterThan(0);
+    db.close();
+  });
+
+  it("getRecentFeedback returns rows within window joined with items", () => {
+    const { db, iid } = bootstrap();
+    addFeedback(db, { item_id: iid, action: "like", created_at: "2026-05-18T08:00:00Z" });
+    addFeedback(db, { item_id: iid, action: "dislike", created_at: "2026-04-01T08:00:00Z" });
+    const rows = getRecentFeedback(db, 30, new Date("2026-05-18T09:00:00Z"));
+    expect(rows.length).toBe(1);
+    expect(rows[0].action).toBe("like");
+    expect(rows[0].item.title).toBe("Item");
+    db.close();
+  });
+});

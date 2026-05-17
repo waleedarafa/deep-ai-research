@@ -217,3 +217,74 @@ export function updatePulseStatus(
   const setClause = fields.map((f) => `${f} = @${f}`).join(", ");
   db.prepare(`UPDATE pulses SET ${setClause} WHERE id = @id`).run({ id, ...patch });
 }
+
+export type FeedbackAction = "like" | "dislike" | "bookmark" | "expand" | "dwell";
+
+export interface FeedbackInput {
+  item_id: number;
+  action: FeedbackAction;
+  created_at: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface RecentFeedbackRow {
+  id: number;
+  action: FeedbackAction;
+  created_at: string;
+  meta: Record<string, unknown> | null;
+  item: {
+    id: number;
+    title: string;
+    summary: string;
+    source: ItemSource;
+    url: string;
+    topics: string[];
+  };
+}
+
+export function addFeedback(db: Db, input: FeedbackInput): number {
+  const info = db
+    .prepare(
+      `INSERT INTO feedback (item_id, action, created_at, meta)
+       VALUES (@item_id, @action, @created_at, @meta)`
+    )
+    .run({
+      item_id: input.item_id,
+      action: input.action,
+      created_at: input.created_at,
+      meta: input.meta ? JSON.stringify(input.meta) : null,
+    });
+  return Number(info.lastInsertRowid);
+}
+
+export function getRecentFeedback(
+  db: Db,
+  windowDays: number,
+  now: Date = new Date()
+): RecentFeedbackRow[] {
+  const cutoff = new Date(now.getTime() - windowDays * 86_400_000).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT f.id, f.action, f.created_at, f.meta,
+              i.id AS i_id, i.title, i.summary, i.source, i.url, i.topics
+         FROM feedback f
+         JOIN pulse_items i ON i.id = f.item_id
+        WHERE f.created_at >= ?
+        ORDER BY f.created_at DESC`
+    )
+    .all(cutoff) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: r.id as number,
+    action: r.action as FeedbackAction,
+    created_at: r.created_at as string,
+    meta: r.meta ? JSON.parse(r.meta as string) : null,
+    item: {
+      id: r.i_id as number,
+      title: r.title as string,
+      summary: r.summary as string,
+      source: r.source as ItemSource,
+      url: r.url as string,
+      topics: JSON.parse((r.topics as string) ?? "[]"),
+    },
+  }));
+}
