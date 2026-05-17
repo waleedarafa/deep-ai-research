@@ -48,8 +48,10 @@ describe("github trending", () => {
       language: "Python",
     });
     const calledUrl = fetchMock.mock.calls[0][0] as string;
-    expect(calledUrl).toContain("created:%3E2026-05-17");
-    expect(calledUrl).toContain("topic:llm");
+    expect(calledUrl).toContain("created%3A%3E2026-05-17");
+    expect(calledUrl).toContain("topic%3Allm");
+    expect(calledUrl).toContain("("); // opening paren proves topic grouping
+    expect(calledUrl).toContain(")"); // closing paren
   });
 
   it("throws on non-ok responses", async () => {

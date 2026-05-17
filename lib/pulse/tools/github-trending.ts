@@ -19,8 +19,8 @@ const TOPICS = ["llm", "ai", "agents", "ml", "rag"];
 
 function buildSearchUrl(opts: FetchOptions): string {
   const dateStr = opts.since.toISOString().slice(0, 10);
-  const topicQuery = TOPICS.map((t) => `topic:${t}`).join("+OR+");
-  const q = encodeURI(`created:>${dateStr} ${topicQuery}`).replace(/%20/g, "+");
+  const topicAlts = TOPICS.map((t) => `topic:${t}`).join(" OR ");
+  const q = encodeURIComponent(`created:>${dateStr} (${topicAlts})`);
   return `https://api.github.com/search/repositories?q=${q}&sort=stars&order=desc&per_page=${opts.limit}`;
 }
 
