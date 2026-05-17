@@ -52,3 +52,11 @@ next-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/preferences.json
+data/pulse.log
+data/pulse.err
