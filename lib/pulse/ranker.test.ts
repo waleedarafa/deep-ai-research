@@ -107,4 +107,61 @@ describe("rankCandidates", () => {
     });
     expect(ranked.map((r) => r.url)).toEqual(["https://fresh.example/b"]);
   });
+
+  it("deduplicates URLs even if LLM repeats them in picks", async () => {
+    const candidates = [
+      fakeCandidate(1, "paper", { url: "https://example.com/a" }),
+      fakeCandidate(2, "paper", { url: "https://example.com/b" }),
+    ];
+    const queryLLM = vi.fn().mockResolvedValue({
+      picks: [
+        { url: "https://example.com/a", priority: "high", match_score: 5, complexity: "intermediate", read_minutes: 5 },
+        { url: "https://example.com/a", priority: "medium", match_score: 3, complexity: "intermediate", read_minutes: 5 },
+        { url: "https://example.com/b", priority: "high", match_score: 4, complexity: "intermediate", read_minutes: 5 },
+      ],
+    });
+    const ranked = await rankCandidates({
+      candidates,
+      preferences: SAMPLE_PREFS,
+      recentPulseUrls: [],
+      queryLLM,
+    });
+    expect(ranked.length).toBe(2);
+    expect(ranked.map((r) => r.url)).toEqual(["https://example.com/a", "https://example.com/b"]);
+  });
+
+  it("tops up from remainder when source floor caps LLM picks short", async () => {
+    // 10 LLM picks all from 'paper' -> floor caps at 5 -> top-up adds from other sources
+    const candidates: Candidate[] = [
+      ...Array.from({ length: 10 }, (_, i) =>
+        fakeCandidate(i, "paper", { url: `https://example.com/p${i}` })
+      ),
+      ...Array.from({ length: 5 }, (_, i) =>
+        fakeCandidate(100 + i, "news", { url: `https://example.com/n${i}` })
+      ),
+      ...Array.from({ length: 5 }, (_, i) =>
+        fakeCandidate(200 + i, "github", { url: `https://example.com/g${i}` })
+      ),
+    ];
+    const queryLLM = vi.fn().mockResolvedValue({
+      picks: candidates.slice(0, 10).map((c) => ({
+        url: c.url,
+        priority: "high",
+        match_score: 5,
+        complexity: "intermediate",
+        read_minutes: 5,
+      })),
+    });
+    const ranked = await rankCandidates({
+      candidates,
+      preferences: SAMPLE_PREFS,
+      recentPulseUrls: [],
+      queryLLM,
+    });
+    expect(ranked.length).toBe(10);
+    const paperCount = ranked.filter((r) => r.source === "paper").length;
+    expect(paperCount).toBeLessThanOrEqual(5);
+    const otherSources = ranked.filter((r) => r.source !== "paper").length;
+    expect(otherSources).toBeGreaterThanOrEqual(5);
+  });
 });

@@ -150,6 +150,35 @@ function enforceSourceFloor(items: RankedItem[]): RankedItem[] {
   return out;
 }
 
+function topUpFromRemainder(
+  current: RankedItem[],
+  pool: Candidate[],
+  alreadyPicked: Set<string>
+): RankedItem[] {
+  const sourceCounts: Record<string, number> = {};
+  for (const it of current) sourceCounts[it.source] = (sourceCounts[it.source] ?? 0) + 1;
+
+  const out = [...current];
+  for (const cand of pool) {
+    if (out.length >= TOP_N) break;
+    const key = normalize(cand.url);
+    if (alreadyPicked.has(key)) continue;
+    const used = sourceCounts[cand.source] ?? 0;
+    if (used >= MAX_PER_SOURCE) continue;
+    sourceCounts[cand.source] = used + 1;
+    alreadyPicked.add(key);
+    out.push({
+      ...cand,
+      rank: out.length + 1,
+      priority: "medium",
+      match_score: 2,
+      complexity: "intermediate",
+      read_minutes: 5,
+    });
+  }
+  return out;
+}
+
 export async function rankCandidates(input: RankInput): Promise<RankedItem[]> {
   const filtered = dedupeAndDrop(input.candidates, input.recentPulseUrls);
   if (filtered.length === 0) return [];
@@ -169,9 +198,13 @@ export async function rankCandidates(input: RankInput): Promise<RankedItem[]> {
 
   const byUrl = new Map(filtered.map((c) => [normalize(c.url), c]));
   const ordered: RankedItem[] = [];
+  const seen = new Set<string>();
   for (const pick of response.picks) {
-    const cand = byUrl.get(normalize(pick.url));
+    const key = normalize(pick.url);
+    if (seen.has(key)) continue;
+    const cand = byUrl.get(key);
     if (!cand) continue;
+    seen.add(key);
     ordered.push({
       ...cand,
       rank: ordered.length + 1,
@@ -182,5 +215,7 @@ export async function rankCandidates(input: RankInput): Promise<RankedItem[]> {
     });
   }
 
-  return enforceSourceFloor(ordered);
+  const floored = enforceSourceFloor(ordered);
+  if (floored.length >= TOP_N) return floored;
+  return topUpFromRemainder(floored, filtered, seen);
 }
