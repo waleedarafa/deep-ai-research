@@ -36,3 +36,198 @@ describe("db schema", () => {
     db.close();
   });
 });
+
+import {
+  createPulse,
+  insertPulseItem,
+  getLatestPulse,
+  getPulseByDate,
+  listPulses,
+  getPulseItems,
+} from "./db";
+
+describe("pulse + item CRUD", () => {
+  let dir: string;
+  let dbPath: string;
+
+  function freshDb() {
+    dir = mkdtempSync(path.join(os.tmpdir(), "pulse-crud-"));
+    dbPath = path.join(dir, "pulse.db");
+    const db = openDb(dbPath);
+    migrate(db);
+    return db;
+  }
+
+  it("inserts a pulse and retrieves it", () => {
+    const db = freshDb();
+    const id = createPulse(db, {
+      generated_at: "2026-05-18T07:00:00Z",
+      date_key: "2026-05-18",
+      item_count: 0,
+      status: "running",
+    });
+    expect(id).toBeGreaterThan(0);
+    const fetched = getPulseByDate(db, "2026-05-18");
+    expect(fetched?.id).toBe(id);
+    expect(fetched?.status).toBe("running");
+    db.close();
+  });
+
+  it("rejects duplicate date_key", () => {
+    const db = freshDb();
+    createPulse(db, {
+      generated_at: "2026-05-18T07:00:00Z",
+      date_key: "2026-05-18",
+      item_count: 0,
+      status: "ok",
+    });
+    expect(() =>
+      createPulse(db, {
+        generated_at: "2026-05-18T07:01:00Z",
+        date_key: "2026-05-18",
+        item_count: 0,
+        status: "ok",
+      })
+    ).toThrow();
+    db.close();
+  });
+
+  it("inserts items and lists by pulse_id ordered by rank", () => {
+    const db = freshDb();
+    const pid = createPulse(db, {
+      generated_at: "2026-05-18T07:00:00Z",
+      date_key: "2026-05-18",
+      item_count: 2,
+      status: "ok",
+    });
+    insertPulseItem(db, {
+      pulse_id: pid,
+      rank: 2,
+      source: "paper",
+      priority: "medium",
+      match_score: 3,
+      complexity: "intermediate",
+      read_minutes: 8,
+      title: "B paper",
+      url: "https://arxiv.org/abs/2511.0002",
+      outlet: "arXiv",
+      summary: "summary B",
+      topics: ["moe"],
+      source_meta: { authors: ["A"] },
+      created_at: "2026-05-18T07:00:01Z",
+    });
+    insertPulseItem(db, {
+      pulse_id: pid,
+      rank: 1,
+      source: "paper",
+      priority: "high",
+      match_score: 5,
+      complexity: "advanced",
+      read_minutes: 12,
+      title: "A paper",
+      url: "https://arxiv.org/abs/2511.0001",
+      outlet: "arXiv",
+      summary: "summary A",
+      topics: ["scaling"],
+      source_meta: { authors: ["B"] },
+      created_at: "2026-05-18T07:00:01Z",
+    });
+    const items = getPulseItems(db, pid);
+    expect(items.map((i) => i.rank)).toEqual([1, 2]);
+    expect(items[0].topics).toEqual(["scaling"]);
+    db.close();
+  });
+
+  it("dedupes by url across pulses", () => {
+    const db = freshDb();
+    const p1 = createPulse(db, {
+      generated_at: "2026-05-17T07:00:00Z",
+      date_key: "2026-05-17",
+      item_count: 0,
+      status: "ok",
+    });
+    insertPulseItem(db, {
+      pulse_id: p1,
+      rank: 1,
+      source: "paper",
+      priority: "high",
+      match_score: 5,
+      complexity: "advanced",
+      read_minutes: 12,
+      title: "dup",
+      url: "https://arxiv.org/abs/dup",
+      outlet: "arXiv",
+      summary: "x",
+      topics: [],
+      source_meta: {},
+      created_at: "2026-05-17T07:00:01Z",
+    });
+    const p2 = createPulse(db, {
+      generated_at: "2026-05-18T07:00:00Z",
+      date_key: "2026-05-18",
+      item_count: 0,
+      status: "ok",
+    });
+    expect(() =>
+      insertPulseItem(db, {
+        pulse_id: p2,
+        rank: 1,
+        source: "paper",
+        priority: "high",
+        match_score: 5,
+        complexity: "advanced",
+        read_minutes: 12,
+        title: "dup again",
+        url: "https://arxiv.org/abs/dup",
+        outlet: "arXiv",
+        summary: "x",
+        topics: [],
+        source_meta: {},
+        created_at: "2026-05-18T07:00:01Z",
+      })
+    ).toThrow();
+    db.close();
+  });
+
+  it("getLatestPulse returns the newest by date_key", () => {
+    const db = freshDb();
+    createPulse(db, {
+      generated_at: "2026-05-16T07:00:00Z",
+      date_key: "2026-05-16",
+      item_count: 0,
+      status: "ok",
+    });
+    createPulse(db, {
+      generated_at: "2026-05-18T07:00:00Z",
+      date_key: "2026-05-18",
+      item_count: 0,
+      status: "ok",
+    });
+    createPulse(db, {
+      generated_at: "2026-05-17T07:00:00Z",
+      date_key: "2026-05-17",
+      item_count: 0,
+      status: "ok",
+    });
+    expect(getLatestPulse(db)?.date_key).toBe("2026-05-18");
+    db.close();
+  });
+
+  it("listPulses returns newest first", () => {
+    const db = freshDb();
+    for (const d of ["2026-05-16", "2026-05-18", "2026-05-17"]) {
+      createPulse(db, {
+        generated_at: `${d}T07:00:00Z`,
+        date_key: d,
+        item_count: 0,
+        status: "ok",
+      });
+    }
+    expect(listPulses(db).map((p) => p.date_key)).toEqual([
+      "2026-05-18",
+      "2026-05-17",
+      "2026-05-16",
+    ]);
+    db.close();
+  });
+});

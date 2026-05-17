@@ -64,3 +64,156 @@ CREATE TABLE IF NOT EXISTS usage (
 export function migrate(db: Db): void {
   db.exec(SCHEMA);
 }
+
+export type PulseStatus = "ok" | "partial" | "failed" | "running";
+export type ItemSource = "paper" | "news" | "github" | "x";
+export type ItemPriority = "high" | "medium" | "low";
+export type ItemComplexity = "beginner" | "intermediate" | "advanced";
+
+export interface PulseRow {
+  id: number;
+  generated_at: string;
+  date_key: string;
+  item_count: number;
+  cost_usd: number | null;
+  duration_ms: number | null;
+  status: PulseStatus;
+}
+
+export interface PulseItemRow {
+  id: number;
+  pulse_id: number;
+  rank: number;
+  source: ItemSource;
+  priority: ItemPriority;
+  match_score: number;
+  complexity: ItemComplexity;
+  read_minutes: number | null;
+  title: string;
+  url: string;
+  outlet: string | null;
+  summary: string;
+  topics: string[];
+  body_md: string | null;
+  source_meta: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface CreatePulseInput {
+  generated_at: string;
+  date_key: string;
+  item_count: number;
+  status: PulseStatus;
+  cost_usd?: number;
+  duration_ms?: number;
+}
+
+export interface InsertItemInput {
+  pulse_id: number;
+  rank: number;
+  source: ItemSource;
+  priority: ItemPriority;
+  match_score: number;
+  complexity: ItemComplexity;
+  read_minutes: number | null;
+  title: string;
+  url: string;
+  outlet: string | null;
+  summary: string;
+  topics: string[];
+  body_md?: string | null;
+  source_meta: Record<string, unknown>;
+  created_at: string;
+}
+
+function rowToPulse(row: Record<string, unknown>): PulseRow {
+  return row as PulseRow;
+}
+
+function rowToItem(row: Record<string, unknown>): PulseItemRow {
+  return {
+    ...(row as Omit<PulseItemRow, "topics" | "source_meta">),
+    topics: JSON.parse((row.topics as string) ?? "[]"),
+    source_meta: JSON.parse((row.source_meta as string) ?? "{}"),
+  } as PulseItemRow;
+}
+
+export function createPulse(db: Db, input: CreatePulseInput): number {
+  const stmt = db.prepare(
+    `INSERT INTO pulses (generated_at, date_key, item_count, status, cost_usd, duration_ms)
+     VALUES (@generated_at, @date_key, @item_count, @status, @cost_usd, @duration_ms)`
+  );
+  const info = stmt.run({
+    generated_at: input.generated_at,
+    date_key: input.date_key,
+    item_count: input.item_count,
+    status: input.status,
+    cost_usd: input.cost_usd ?? null,
+    duration_ms: input.duration_ms ?? null,
+  });
+  return Number(info.lastInsertRowid);
+}
+
+export function insertPulseItem(db: Db, input: InsertItemInput): number {
+  const stmt = db.prepare(
+    `INSERT INTO pulse_items
+       (pulse_id, rank, source, priority, match_score, complexity, read_minutes,
+        title, url, outlet, summary, topics, body_md, source_meta, created_at)
+     VALUES
+       (@pulse_id, @rank, @source, @priority, @match_score, @complexity, @read_minutes,
+        @title, @url, @outlet, @summary, @topics, @body_md, @source_meta, @created_at)`
+  );
+  const info = stmt.run({
+    pulse_id: input.pulse_id,
+    rank: input.rank,
+    source: input.source,
+    priority: input.priority,
+    match_score: input.match_score,
+    complexity: input.complexity,
+    read_minutes: input.read_minutes,
+    title: input.title,
+    url: input.url,
+    outlet: input.outlet,
+    summary: input.summary,
+    topics: JSON.stringify(input.topics),
+    body_md: input.body_md ?? null,
+    source_meta: JSON.stringify(input.source_meta),
+    created_at: input.created_at,
+  });
+  return Number(info.lastInsertRowid);
+}
+
+export function getLatestPulse(db: Db): PulseRow | null {
+  const row = db.prepare("SELECT * FROM pulses ORDER BY date_key DESC LIMIT 1").get();
+  return row ? rowToPulse(row as Record<string, unknown>) : null;
+}
+
+export function getPulseByDate(db: Db, date_key: string): PulseRow | null {
+  const row = db.prepare("SELECT * FROM pulses WHERE date_key = ?").get(date_key);
+  return row ? rowToPulse(row as Record<string, unknown>) : null;
+}
+
+export function listPulses(db: Db, limit = 30): PulseRow[] {
+  const rows = db
+    .prepare("SELECT * FROM pulses ORDER BY date_key DESC LIMIT ?")
+    .all(limit) as Record<string, unknown>[];
+  return rows.map(rowToPulse);
+}
+
+export function getPulseItems(db: Db, pulse_id: number): PulseItemRow[] {
+  const rows = db
+    .prepare("SELECT * FROM pulse_items WHERE pulse_id = ? ORDER BY rank ASC")
+    .all(pulse_id) as Record<string, unknown>[];
+  return rows.map(rowToItem);
+}
+
+export function updatePulseStatus(
+  db: Db,
+  id: number,
+  patch: { status?: PulseStatus; item_count?: number; cost_usd?: number; duration_ms?: number }
+): void {
+  const fields = Object.keys(patch);
+  if (fields.length === 0) return;
+  const setClause = fields.map((f) => `${f} = @${f}`).join(", ");
+  db.prepare(`UPDATE pulses SET ${setClause} WHERE id = @id`).run({ id, ...patch });
+}
