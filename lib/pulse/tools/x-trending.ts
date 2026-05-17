@@ -20,7 +20,7 @@ export const CURATED_X_ACCOUNTS: readonly string[] = [
   "OpenAI",
   "GoogleDeepMind",
   "elvis_omarsar",
-  "omarsar0",
+  "emollick",
   "karpathy",
   "ylecun",
   "simonw",

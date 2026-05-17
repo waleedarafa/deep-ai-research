@@ -49,4 +49,10 @@ describe("x trending", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 429 } as Response));
     expect(await fetchRecentTweets({ sinceHours: 24, limit: 5 })).toEqual([]);
   });
+
+  it("returns [] when fetch throws (network error)", async () => {
+    vi.stubEnv("X_BEARER_TOKEN", "AAAA");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    expect(await fetchRecentTweets({ sinceHours: 24, limit: 5 })).toEqual([]);
+  });
 });
