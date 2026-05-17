@@ -282,3 +282,20 @@ describe("feedback", () => {
     db.close();
   });
 });
+
+import { addUsageCost, getUsageForDate } from "./db";
+
+describe("usage", () => {
+  it("upserts cost for a date and returns the running total", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "pulse-usage-"));
+    const db = openDb(path.join(dir, "pulse.db"));
+    migrate(db);
+    addUsageCost(db, "2026-05-18", 0.04, "2026-05-18T07:00:01Z");
+    addUsageCost(db, "2026-05-18", 0.06, "2026-05-18T07:01:00Z");
+    addUsageCost(db, "2026-05-19", 0.02, "2026-05-19T07:00:00Z");
+    expect(getUsageForDate(db, "2026-05-18")).toBeCloseTo(0.1, 6);
+    expect(getUsageForDate(db, "2026-05-19")).toBeCloseTo(0.02, 6);
+    expect(getUsageForDate(db, "2026-05-17")).toBe(0);
+    db.close();
+  });
+});

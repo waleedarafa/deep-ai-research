@@ -288,3 +288,20 @@ export function getRecentFeedback(
     },
   }));
 }
+
+export function addUsageCost(db: Db, date_key: string, cost_usd: number, updated_at: string): void {
+  db.prepare(
+    `INSERT INTO usage (date_key, cost_usd, updated_at)
+     VALUES (@date_key, @cost_usd, @updated_at)
+     ON CONFLICT(date_key) DO UPDATE SET
+       cost_usd = cost_usd + excluded.cost_usd,
+       updated_at = excluded.updated_at`
+  ).run({ date_key, cost_usd, updated_at });
+}
+
+export function getUsageForDate(db: Db, date_key: string): number {
+  const row = db.prepare("SELECT cost_usd FROM usage WHERE date_key = ?").get(date_key) as
+    | { cost_usd: number }
+    | undefined;
+  return row?.cost_usd ?? 0;
+}
