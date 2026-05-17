@@ -57,3 +57,24 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer base {
+  .pulse-page {
+    background: theme('colors.parchment.DEFAULT');
+    color: #2b2b2b;
+    font-family: theme('fontFamily.serif');
+  }
+  .pulse-mono {
+    font-family: theme('fontFamily.mono');
+    letter-spacing: 0.02em;
+  }
+  .pulse-pill {
+    @apply inline-flex items-center px-2 py-0.5 text-xs uppercase pulse-mono;
+    border: 1px solid currentColor;
+  }
+  .pulse-pullquote {
+    border-left: 3px solid theme('colors.brick.DEFAULT');
+    padding-left: 0.75rem;
+    font-style: italic;
+  }
+}

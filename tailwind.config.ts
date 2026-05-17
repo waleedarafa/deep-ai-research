@@ -18,6 +18,10 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        serif: ['"Iowan Old Style"', 'Charter', '"Source Serif Pro"', 'Georgia', 'serif'],
+        mono: ['"JetBrains Mono"', '"IBM Plex Mono"', '"SF Mono"', 'ui-monospace', 'monospace'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -52,6 +56,19 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        parchment: {
+          DEFAULT: '#f5f1e8',
+          dark: '#ece5d3',
+        },
+        brick: {
+          DEFAULT: '#8b1a1a',
+          soft: '#a73b3b',
+        },
+        forest: '#2f5d3a',
+        goldpill: '#b89500',
+        teal: '#1e6d7a',
+        purplepill: '#5a3aa6',
+        cyanpill: '#0f7d8f',
       },
       borderRadius: {
         lg: "var(--radius)",
