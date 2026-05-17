@@ -299,3 +299,33 @@ describe("usage", () => {
     db.close();
   });
 });
+
+import { updatePulseStatus } from "./db";
+
+describe("updatePulseStatus hardening", () => {
+  it("ignores unknown fields and updates only allowlisted columns", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "pulse-up-"));
+    const db = openDb(path.join(dir, "pulse.db"));
+    migrate(db);
+    const pid = createPulse(db, {
+      generated_at: "2026-05-18T07:00:00Z",
+      date_key: "2026-05-18",
+      item_count: 0,
+      status: "running",
+    });
+    // Cast to bypass TS — simulate a widened object reaching the function
+    updatePulseStatus(db, pid, {
+      status: "ok",
+      item_count: 5,
+      // @ts-expect-error injecting an unknown field at runtime
+      "id; DROP TABLE pulses; --": "x",
+    });
+    const row = getPulseByDate(db, "2026-05-18");
+    expect(row?.status).toBe("ok");
+    expect(row?.item_count).toBe(5);
+    // pulses table still exists
+    const cnt = db.prepare("SELECT COUNT(*) AS n FROM pulses").get() as { n: number };
+    expect(cnt.n).toBe(1);
+    db.close();
+  });
+});

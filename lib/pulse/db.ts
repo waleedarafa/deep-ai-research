@@ -207,12 +207,21 @@ export function getPulseItems(db: Db, pulse_id: number): PulseItemRow[] {
   return rows.map(rowToItem);
 }
 
+const ALLOWED_PATCH_FIELDS: ReadonlySet<keyof PulseRow> = new Set([
+  "status",
+  "item_count",
+  "cost_usd",
+  "duration_ms",
+]);
+
 export function updatePulseStatus(
   db: Db,
   id: number,
   patch: { status?: PulseStatus; item_count?: number; cost_usd?: number; duration_ms?: number }
 ): void {
-  const fields = Object.keys(patch);
+  const fields = Object.keys(patch).filter((f): f is keyof PulseRow =>
+    ALLOWED_PATCH_FIELDS.has(f as keyof PulseRow)
+  );
   if (fields.length === 0) return;
   const setClause = fields.map((f) => `${f} = @${f}`).join(", ");
   db.prepare(`UPDATE pulses SET ${setClause} WHERE id = @id`).run({ id, ...patch });
