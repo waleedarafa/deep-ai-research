@@ -1,6 +1,6 @@
 import { AgentConfig } from "../types/agent";
 import { exaSearchTools } from "./tools";
-// import subagentDefinitions from "./agents"; // Will be used in Phase 2
+import subagentDefinitions from "./agents";
 
 /**
  * Deep AI Research Agent Configuration
@@ -95,11 +95,14 @@ Remember: Load CLAUDE.md for comprehensive instructions and memory.
     "exa-search": exaSearchTools
   },
 
-  // Subagent definitions (Phase 2 - not yet active)
-  // agents: subagentDefinitions,
+  // Subagent definitions (Phase 2 - active)
+  agents: subagentDefinitions,
 
   // Allowed tools for the orchestrator
   allowedTools: [
+    // Agent orchestration (required for multi-agent workflow)
+    "Task",
+
     // Exa search tools (neural search for research)
     "mcp__exa-search__search",
     "mcp__exa-search__get_contents",
