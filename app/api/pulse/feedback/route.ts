@@ -27,13 +27,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const db = openDb(dbPath());
-  migrate(db);
-  addFeedback(db, {
-    item_id: parsed.data.item_id,
-    action: parsed.data.action,
-    created_at: new Date().toISOString(),
-    meta: parsed.data.meta,
-  });
-  db.close();
-  return NextResponse.json({ ok: true });
+  try {
+    migrate(db);
+    addFeedback(db, {
+      item_id: parsed.data.item_id,
+      action: parsed.data.action,
+      created_at: new Date().toISOString(),
+      meta: parsed.data.meta,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[pulse/feedback] db error", err);
+    return NextResponse.json({ error: "service unavailable" }, { status: 503 });
+  } finally {
+    db.close();
+  }
 }
