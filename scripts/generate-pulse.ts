@@ -136,15 +136,16 @@ async function main() {
           read_minutes: item.read_minutes,
           title: item.title,
           url: item.url,
-          outlet: item.outlet,
-          summary: item.summary,
-          topics: item.topics,
-          source_meta: item.source_meta,
+          outlet: item.outlet ?? "",
+          summary: item.summary ?? "",
+          topics: Array.isArray(item.topics) ? item.topics : [],
+          source_meta: item.source_meta ?? {},
           created_at: new Date().toISOString(),
         });
       } catch (e) {
-        // dedupe collision; skip
-        console.warn(`[pulse] skipping dup url ${item.url}`);
+        // dedupe collision or insert error; surface details so it isn't silently swallowed
+        const reason = e instanceof Error ? e.message : String(e);
+        console.warn(`[pulse] skipping item url=${item.url} reason=${reason}`);
       }
     }
 
