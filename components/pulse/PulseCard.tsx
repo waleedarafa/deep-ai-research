@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import rehypeRaw from "rehype-raw";
 import type { ClientPulseItem } from "./types";
 import { FeedbackStrip } from "./FeedbackStrip";
 
@@ -25,29 +26,31 @@ export function PulseCard({ item }: Props) {
   const [bodyError, setBodyError] = useState<string | null>(null);
   const src = SOURCE_LABEL[item.source] ?? { text: item.source.toUpperCase(), cls: "" };
 
+  async function loadBody(force: boolean) {
+    setLoadingBody(true);
+    setBodyError(null);
+    try {
+      const res = await fetch("/api/pulse/expand", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ item_id: item.id, force }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setBodyError(typeof json.error === "string" ? json.error : "could not fetch");
+      } else {
+        setBody(json.body_md as string);
+      }
+    } catch (e) {
+      setBodyError((e as Error).message);
+    } finally {
+      setLoadingBody(false);
+    }
+  }
+
   async function openModal() {
     setOpen(true);
-    if (!body && !loadingBody) {
-      setLoadingBody(true);
-      setBodyError(null);
-      try {
-        const res = await fetch("/api/pulse/expand", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ item_id: item.id }),
-        });
-        const json = await res.json();
-        if (!res.ok) {
-          setBodyError(typeof json.error === "string" ? json.error : "could not fetch");
-        } else {
-          setBody(json.body_md as string);
-        }
-      } catch (e) {
-        setBodyError((e as Error).message);
-      } finally {
-        setLoadingBody(false);
-      }
-    }
+    if (!body && !loadingBody) await loadBody(false);
   }
 
   function closeModal() {
@@ -140,13 +143,23 @@ export function PulseCard({ item }: Props) {
             className="bg-parchment border border-parchment-dark shadow-xl max-w-3xl w-full my-8 p-8 relative"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={closeModal}
-              className="absolute top-3 right-4 pulse-mono text-sm text-zinc-600 hover:text-brick"
-              aria-label="Close"
-            >
-              ✕ CLOSE
-            </button>
+            <div className="absolute top-3 right-4 flex gap-3">
+              <button
+                onClick={() => loadBody(true)}
+                disabled={loadingBody}
+                className="pulse-mono text-xs text-zinc-600 hover:text-brick disabled:opacity-40"
+                aria-label="Re-fetch full content"
+              >
+                {loadingBody ? "FETCHING…" : "↻ RE-FETCH"}
+              </button>
+              <button
+                onClick={closeModal}
+                className="pulse-mono text-sm text-zinc-600 hover:text-brick"
+                aria-label="Close"
+              >
+                ✕ CLOSE
+              </button>
+            </div>
 
             <div className="flex gap-2 mb-3 pr-16">
               <span className={`pulse-pill ${src.cls}`}>{src.text}</span>
@@ -180,7 +193,10 @@ export function PulseCard({ item }: Props) {
                 <em className="text-brick">Couldn&apos;t fetch full text ({bodyError}).</em>
               )}
               {!loadingBody && !bodyError && body && (
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw, rehypeHighlight]}
+                >
                   {body}
                 </ReactMarkdown>
               )}

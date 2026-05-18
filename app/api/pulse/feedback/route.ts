@@ -7,7 +7,16 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({
   item_id: z.number().int().positive(),
-  action: z.enum(["like", "dislike", "bookmark", "expand", "dwell"]),
+  action: z.enum([
+    "like",
+    "dislike",
+    "bookmark",
+    "unbookmark",
+    "unlike",
+    "undislike",
+    "expand",
+    "dwell",
+  ]),
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 

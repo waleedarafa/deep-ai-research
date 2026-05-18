@@ -236,7 +236,15 @@ export function updatePulseStatus(
   db.prepare(`UPDATE pulses SET ${setClause} WHERE id = @id`).run({ id, ...patch });
 }
 
-export type FeedbackAction = "like" | "dislike" | "bookmark" | "expand" | "dwell";
+export type FeedbackAction =
+  | "like"
+  | "dislike"
+  | "bookmark"
+  | "unbookmark"
+  | "unlike"
+  | "undislike"
+  | "expand"
+  | "dwell";
 
 export interface FeedbackInput {
   item_id: number;
