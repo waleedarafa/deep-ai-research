@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import type { ClientPulseItem } from "./types";
 import { FeedbackStrip } from "./FeedbackStrip";
 
@@ -171,15 +174,17 @@ export function PulseCard({ item }: Props) {
 
             <blockquote className="pulse-pullquote my-4 text-base">› {item.summary}</blockquote>
 
-            <div className="prose max-w-none my-6 whitespace-pre-wrap font-serif text-base">
+            <div className="prose prose-zinc max-w-none my-6 font-serif text-base prose-headings:font-serif prose-headings:text-zinc-900 prose-p:text-zinc-800 prose-a:text-brick prose-strong:text-zinc-900 prose-code:text-brick prose-pre:bg-zinc-900 prose-pre:text-parchment">
               {loadingBody && <em>Fetching full content…</em>}
               {!loadingBody && bodyError && (
                 <em className="text-brick">Couldn&apos;t fetch full text ({bodyError}).</em>
               )}
-              {!loadingBody && !bodyError && body && body}
-              {!loadingBody && !bodyError && !body && (
-                <em>No content available.</em>
+              {!loadingBody && !bodyError && body && (
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                  {body}
+                </ReactMarkdown>
               )}
+              {!loadingBody && !bodyError && !body && <em>No content available.</em>}
             </div>
           </div>
         </div>

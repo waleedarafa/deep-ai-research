@@ -47,6 +47,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
