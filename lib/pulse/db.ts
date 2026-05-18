@@ -200,6 +200,15 @@ export function listPulses(db: Db, limit = 30): PulseRow[] {
   return rows.map(rowToPulse);
 }
 
+export function getPulseItemById(db: Db, item_id: number): PulseItemRow | null {
+  const row = db.prepare("SELECT * FROM pulse_items WHERE id = ?").get(item_id);
+  return row ? rowToItem(row as Record<string, unknown>) : null;
+}
+
+export function setItemBodyMd(db: Db, item_id: number, body_md: string): void {
+  db.prepare("UPDATE pulse_items SET body_md = ? WHERE id = ?").run(body_md, item_id);
+}
+
 export function getPulseItems(db: Db, pulse_id: number): PulseItemRow[] {
   const rows = db
     .prepare("SELECT * FROM pulse_items WHERE pulse_id = ? ORDER BY rank ASC")

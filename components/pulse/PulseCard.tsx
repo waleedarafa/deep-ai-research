@@ -20,7 +20,36 @@ const SOURCE_LABEL: Record<string, { text: string; cls: string }> = {
 export function PulseCard({ item }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [askSeed, setAskSeed] = useState<string | null>(null);
+  const [body, setBody] = useState<string | null>(item.body_md ?? null);
+  const [loadingBody, setLoadingBody] = useState(false);
+  const [bodyError, setBodyError] = useState<string | null>(null);
   const src = SOURCE_LABEL[item.source] ?? { text: item.source.toUpperCase(), cls: "" };
+
+  async function toggleExpand() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !body && !loadingBody) {
+      setLoadingBody(true);
+      setBodyError(null);
+      try {
+        const res = await fetch("/api/pulse/expand", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ item_id: item.id }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setBodyError(typeof json.error === "string" ? json.error : "could not fetch");
+        } else {
+          setBody(json.body_md as string);
+        }
+      } catch (e) {
+        setBodyError((e as Error).message);
+      } finally {
+        setLoadingBody(false);
+      }
+    }
+  }
 
   return (
     <article className="bg-parchment border border-parchment-dark shadow-sm p-6 mb-6">
@@ -41,7 +70,7 @@ export function PulseCard({ item }: Props) {
       <blockquote className="pulse-pullquote my-4 text-base">› {item.summary}</blockquote>
 
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggleExpand}
         className="pulse-mono text-xs text-brick uppercase tracking-wider mb-4"
       >
         {expanded ? "▲ Hide full text" : "▶ Read full"}
@@ -49,7 +78,16 @@ export function PulseCard({ item }: Props) {
 
       {expanded && (
         <div className="prose max-w-none my-4 whitespace-pre-wrap font-serif text-base">
-          {item.body_md ?? <em>Body not yet fetched. Click a quick action or Ask agent to load.</em>}
+          {loadingBody && <em>Fetching full content…</em>}
+          {!loadingBody && bodyError && (
+            <em className="text-brick">
+              Couldn&apos;t fetch full text ({bodyError}). Try Ask agent below.
+            </em>
+          )}
+          {!loadingBody && !bodyError && body && body}
+          {!loadingBody && !bodyError && !body && (
+            <em>Body not yet fetched. Click a quick action or Ask agent to load.</em>
+          )}
         </div>
       )}
 
