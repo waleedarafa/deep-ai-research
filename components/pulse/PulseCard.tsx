@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ClientPulseItem } from "./types";
 import { FeedbackStrip } from "./FeedbackStrip";
-import { QuickActions } from "./QuickActions";
-import { AskAgentBox } from "./AskAgentBox";
 
 interface Props {
   item: ClientPulseItem;
@@ -18,17 +16,15 @@ const SOURCE_LABEL: Record<string, { text: string; cls: string }> = {
 };
 
 export function PulseCard({ item }: Props) {
-  const [expanded, setExpanded] = useState(false);
-  const [askSeed, setAskSeed] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const [body, setBody] = useState<string | null>(item.body_md ?? null);
   const [loadingBody, setLoadingBody] = useState(false);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const src = SOURCE_LABEL[item.source] ?? { text: item.source.toUpperCase(), cls: "" };
 
-  async function toggleExpand() {
-    const next = !expanded;
-    setExpanded(next);
-    if (next && !body && !loadingBody) {
+  async function openModal() {
+    setOpen(true);
+    if (!body && !loadingBody) {
       setLoadingBody(true);
       setBodyError(null);
       try {
@@ -51,73 +47,143 @@ export function PulseCard({ item }: Props) {
     }
   }
 
+  function closeModal() {
+    setOpen(false);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeModal();
+    }
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
   return (
-    <article className="bg-parchment border border-parchment-dark shadow-sm p-6 mb-6">
-      <div className="flex gap-2 mb-3">
-        <span className={`pulse-pill ${src.cls}`}>{src.text}</span>
-        <span className="pulse-pill text-zinc-700 border-zinc-400">{item.complexity.toUpperCase()}</span>
-        {item.priority === "high" && (
-          <span className="pulse-pill text-goldpill border-goldpill">★ Essential</span>
-        )}
-      </div>
-
-      <h2 className="font-serif text-2xl leading-tight mb-2">{item.title}</h2>
-
-      <div className="pulse-mono text-xs uppercase tracking-wider mb-4 text-zinc-600">
-        {item.source.toUpperCase()} · {item.outlet ?? "—"} · {item.read_minutes ?? "?"} MIN READ
-      </div>
-
-      <blockquote className="pulse-pullquote my-4 text-base">› {item.summary}</blockquote>
-
-      <button
-        onClick={toggleExpand}
-        className="pulse-mono text-xs text-brick uppercase tracking-wider mb-4"
-      >
-        {expanded ? "▲ Hide full text" : "▶ Read full"}
-      </button>
-
-      {expanded && (
-        <div className="prose max-w-none my-4 whitespace-pre-wrap font-serif text-base">
-          {loadingBody && <em>Fetching full content…</em>}
-          {!loadingBody && bodyError && (
-            <em className="text-brick">
-              Couldn&apos;t fetch full text ({bodyError}). Try Ask agent below.
-            </em>
-          )}
-          {!loadingBody && !bodyError && body && body}
-          {!loadingBody && !bodyError && !body && (
-            <em>Body not yet fetched. Click a quick action or Ask agent to load.</em>
+    <>
+      <article className="bg-parchment border border-parchment-dark shadow-sm p-6 mb-6">
+        <div className="flex gap-2 mb-3">
+          <span className={`pulse-pill ${src.cls}`}>{src.text}</span>
+          <span className="pulse-pill text-zinc-700 border-zinc-400">
+            {item.complexity.toUpperCase()}
+          </span>
+          {item.priority === "high" && (
+            <span className="pulse-pill text-goldpill border-goldpill">★ Essential</span>
           )}
         </div>
-      )}
 
-      <div className="grid grid-cols-3 gap-6 my-4">
-        <div>
-          <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">Match</div>
-          <div className="pulse-mono text-base text-brick">
-            {"■".repeat(item.match_score)}
-            {"□".repeat(5 - item.match_score)}
+        <h2 className="font-serif text-2xl leading-tight mb-2">{item.title}</h2>
+
+        <div className="pulse-mono text-xs uppercase tracking-wider mb-4 text-zinc-600">
+          {item.source.toUpperCase()} · {item.outlet ?? "—"} · {item.read_minutes ?? "?"} MIN READ
+        </div>
+
+        <blockquote className="pulse-pullquote my-4 text-base">› {item.summary}</blockquote>
+
+        <button
+          onClick={openModal}
+          className="pulse-mono text-xs text-brick uppercase tracking-wider mb-4 hover:underline"
+        >
+          ▶ Read full
+        </button>
+
+        <div className="grid grid-cols-3 gap-6 my-4">
+          <div>
+            <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">Match</div>
+            <div className="pulse-mono text-base text-brick">
+              {"■".repeat(item.match_score)}
+              {"□".repeat(5 - item.match_score)}
+            </div>
+          </div>
+          <div>
+            <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">
+              Complexity
+            </div>
+            <div className="font-serif">{item.complexity}</div>
+          </div>
+          <div>
+            <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">
+              Read Time
+            </div>
+            <div className="font-serif">{item.read_minutes ?? "?"} min</div>
           </div>
         </div>
-        <div>
-          <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">Complexity</div>
-          <div className="font-serif">{item.complexity}</div>
-        </div>
-        <div>
-          <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">Read Time</div>
-          <div className="font-serif">{item.read_minutes ?? "?"} min</div>
-        </div>
-      </div>
 
-      <div className="flex gap-2 flex-wrap mb-2">
-        {item.topics.map((t) => (
-          <span key={t} className="pulse-pill text-zinc-600 border-zinc-400">{t}</span>
-        ))}
-      </div>
+        <div className="flex gap-2 flex-wrap mb-2">
+          {item.topics.map((t) => (
+            <span key={t} className="pulse-pill text-zinc-600 border-zinc-400">
+              {t}
+            </span>
+          ))}
+        </div>
 
-      <QuickActions onAction={(prompt) => setAskSeed(prompt)} />
-      <AskAgentBox item={item} seed={askSeed} onConsumeSeed={() => setAskSeed(null)} />
-      <FeedbackStrip item={item} />
-    </article>
+        <FeedbackStrip item={item} />
+      </article>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 sm:p-8 overflow-y-auto"
+          onClick={closeModal}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-parchment border border-parchment-dark shadow-xl max-w-3xl w-full my-8 p-8 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={closeModal}
+              className="absolute top-3 right-4 pulse-mono text-sm text-zinc-600 hover:text-brick"
+              aria-label="Close"
+            >
+              ✕ CLOSE
+            </button>
+
+            <div className="flex gap-2 mb-3 pr-16">
+              <span className={`pulse-pill ${src.cls}`}>{src.text}</span>
+              <span className="pulse-pill text-zinc-700 border-zinc-400">
+                {item.complexity.toUpperCase()}
+              </span>
+              {item.priority === "high" && (
+                <span className="pulse-pill text-goldpill border-goldpill">★ Essential</span>
+              )}
+            </div>
+
+            <h2 className="font-serif text-3xl leading-tight mb-2">{item.title}</h2>
+
+            <div className="pulse-mono text-xs uppercase tracking-wider mb-4 text-zinc-600">
+              {item.source.toUpperCase()} · {item.outlet ?? "—"} ·{" "}
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-brick"
+              >
+                Source ↗
+              </a>
+            </div>
+
+            <blockquote className="pulse-pullquote my-4 text-base">› {item.summary}</blockquote>
+
+            <div className="prose max-w-none my-6 whitespace-pre-wrap font-serif text-base">
+              {loadingBody && <em>Fetching full content…</em>}
+              {!loadingBody && bodyError && (
+                <em className="text-brick">Couldn&apos;t fetch full text ({bodyError}).</em>
+              )}
+              {!loadingBody && !bodyError && body && body}
+              {!loadingBody && !bodyError && !body && (
+                <em>No content available.</em>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
