@@ -41,7 +41,14 @@ collect their JSON outputs, deduplicate by URL, and return the merged candidate 
   "preferences": { ...verbatim content of preferences.json... }
 }
 \`\`\`
-Return ONLY this JSON, no prose. The calling script handles ranking and DB writes.`.trim(),
+
+**CRITICAL — DO NOT VIOLATE:**
+- Preserve EVERY field of each candidate verbatim. Do NOT omit, summarize, condense, or "clean up"
+  any field. In particular: title, url, summary, outlet, source, topics, and source_meta must all
+  pass through unchanged from the subagents' output.
+- If a subagent's candidate has a non-empty "summary" or "outlet", that exact text must appear in
+  your final JSON. Failing to preserve summary/outlet causes downstream rendering to show blank cards.
+- Return ONLY the JSON object, no prose. The calling script handles ranking and DB writes.`.trim(),
     },
     settingSources: ["project"],
     mcpServers: {

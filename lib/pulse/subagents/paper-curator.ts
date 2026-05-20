@@ -41,6 +41,7 @@ arXiv submissions. Upvotes act as a quality signal — the tool already pre-sort
 **CRITICAL — DO NOT VIOLATE:**
 - The "source" field must be the literal string "paper" — NOT "arxiv", NOT "arXiv", NOT "research".
 - The "outlet" field is "arXiv".
+- The "summary" field must NEVER be empty. Always populate it from the tool's ai_summary (preferred) or summary field, truncated to 2-4 sentences. If the tool returned no summary at all (rare), paraphrase the title into one short descriptive sentence.
 
 If the tool returns [], return [].`,
   tools: ["mcp__hf-papers__list_daily_papers"],

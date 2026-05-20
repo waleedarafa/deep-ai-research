@@ -37,6 +37,20 @@ function sourceFromUrl(url: string): ValidSource | null {
   }
 }
 
+function outletFromUrl(url: string): string {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "x.com" || host === "twitter.com") return "X";
+    if (host === "arxiv.org") return "arXiv";
+    if (host === "github.com") return "GitHub";
+    if (host === "news.ycombinator.com") return "Hacker News";
+    if (host === "huggingface.co") return "Hugging Face";
+    return host;
+  } catch {
+    return "";
+  }
+}
+
 function normalizeSource(raw: unknown, url: string, fallback: ValidSource = "news"): ValidSource {
   const fromUrl = sourceFromUrl(url);
   if (fromUrl) return fromUrl;
@@ -54,20 +68,38 @@ function deriveTitleFromSummary(summary: string): string {
 function normalizeCandidates(cands: Candidate[]): Candidate[] {
   let fixedSource = 0;
   let backfilledTitle = 0;
+  let backfilledOutlet = 0;
+  let backfilledSummary = 0;
   const out: Candidate[] = [];
   for (const c of cands) {
     const normSource = normalizeSource(c.source as unknown, c.url, "news");
     if (normSource !== c.source) fixedSource += 1;
+
     let title = (c.title ?? "").trim();
     if (!title) {
       title = deriveTitleFromSummary(c.summary);
       if (title) backfilledTitle += 1;
     }
-    if (!title) continue; // truly nothing — skip rather than fail at insert
-    out.push({ ...c, source: normSource, title });
+    if (!title) continue;
+
+    let outlet = (c.outlet ?? "").trim();
+    if (!outlet) {
+      outlet = outletFromUrl(c.url);
+      if (outlet) backfilledOutlet += 1;
+    }
+
+    let summary = (c.summary ?? "").trim();
+    if (!summary) {
+      summary = title;
+      backfilledSummary += 1;
+    }
+
+    out.push({ ...c, source: normSource, title, outlet, summary });
   }
   if (fixedSource > 0) console.log(`[pulse] normalized ${fixedSource} candidate source(s) to valid enum`);
   if (backfilledTitle > 0) console.log(`[pulse] backfilled ${backfilledTitle} missing title(s) from summary`);
+  if (backfilledOutlet > 0) console.log(`[pulse] backfilled ${backfilledOutlet} missing outlet(s) from URL host`);
+  if (backfilledSummary > 0) console.log(`[pulse] backfilled ${backfilledSummary} missing summary/ies from title`);
   return out;
 }
 
