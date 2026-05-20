@@ -115,7 +115,9 @@ function neutralPreferences(): Preferences {
   };
 }
 
-loadDotenv({ path: path.resolve(process.cwd(), ".env.local") });
+// override: true so .env.local always wins over inherited env (e.g. a stale
+// dev-server env when this script is spawned by app/api/pulse/generate).
+loadDotenv({ path: path.resolve(process.cwd(), ".env.local"), override: true });
 
 const REPO_ROOT = process.cwd();
 const DATA_DIR = path.resolve(REPO_ROOT, "data");
