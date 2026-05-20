@@ -103,14 +103,17 @@ async function runXSearch(
 }
 
 export async function fetchRecentTweets(opts: FetchTweetOptions): Promise<TrendingTweet[]> {
-  const minEngagement = opts.minEngagement ?? 200;
+  const minEngagement = opts.minEngagement ?? 100;
 
   const whitelistQuery = `(${CURATED_X_ACCOUNTS.map((u) => `from:${u}`).join(" OR ")}) -is:retweet lang:en`;
   const discoveryQuery = `(${DISCOVERY_KEYWORDS.join(" OR ")}) lang:en -is:retweet -is:reply has:links`;
 
+  // Always fetch the X API max (100) on each side so engagement-sort sees a real
+  // pool. The API returns recent-first; sizing this by opts.limit would hide
+  // high-engagement tweets that aren't in the most-recent slice.
   const [whitelist, discovery] = await Promise.all([
-    runXSearch(whitelistQuery, opts.sinceHours, opts.limit * 4),
-    runXSearch(discoveryQuery, opts.sinceHours, 50),
+    runXSearch(whitelistQuery, opts.sinceHours, 100),
+    runXSearch(discoveryQuery, opts.sinceHours, 100),
   ]);
 
   const deduped = new Map<string, TrendingTweet>();
@@ -141,7 +144,7 @@ export const xTrendingTools = createSdkMcpServer({
           .number()
           .min(0)
           .max(100000)
-          .default(200)
+          .default(100)
           .describe("Minimum engagement score (likes + retweets*2 + replies*1.5 + quotes). Drops weak tweets."),
       },
       async (args) => {

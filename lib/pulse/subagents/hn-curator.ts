@@ -10,7 +10,7 @@ export const hnCurator: AgentDefinition = {
 **Tool:** mcp__hn-trending__list_trending (returns stories already filtered by AI keywords and minimum score)
 
 **Procedure:**
-1. Call mcp__hn-trending__list_trending with since_hours=36, limit=8, min_score=30.
+1. Call mcp__hn-trending__list_trending with since_hours=36, limit=8, min_score=50.
 2. For each story:
    - title: use the HN title as-is
    - url: use the story's primary url (the linked article)
