@@ -28,6 +28,11 @@ export const xCurator: AgentDefinition = {
   }
 ]
 \`\`\`
+
+**CRITICAL — DO NOT VIOLATE:**
+- The "source" field must be the literal string "x" (lowercase, single character) — NOT "twitter", NOT "tweet", NOT "social". Always "x".
+- The "outlet" field is "X" (uppercase).
+
 If empty, return [].`,
   tools: ["mcp__x-trending__list_recent_tweets"],
   model: "haiku",

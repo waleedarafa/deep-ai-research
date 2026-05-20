@@ -2,7 +2,6 @@ import path from "node:path";
 import { openDb, migrate, getLatestPulse, getPulseItems, listPulses } from "@/lib/pulse/db";
 import { PulseShell } from "@/components/pulse/PulseShell";
 import { PulseHeader } from "@/components/pulse/PulseHeader";
-import { TopicFilter } from "@/components/pulse/TopicFilter";
 import { HistoryList } from "@/components/pulse/HistoryList";
 import { PulseFeed } from "@/components/pulse/PulseFeed";
 
@@ -22,17 +21,10 @@ export default async function PulsePage() {
   }));
   db.close();
 
-  const allTopics = Array.from(new Set(items.flatMap((i) => i.topics)));
-
   return (
     <PulseShell
       header={<PulseHeader pulse={pulse} />}
-      sidebar={
-        <>
-          <TopicFilter topics={allTopics} items={items} />
-          <HistoryList entries={history} activeId={pulse?.id ?? null} />
-        </>
-      }
+      sidebar={<HistoryList entries={history} activeId={pulse?.id ?? null} />}
     >
       <PulseFeed initialItems={items} />
     </PulseShell>

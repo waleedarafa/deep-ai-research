@@ -35,7 +35,7 @@
     "dotenv": "^17.4.2",
     "exa-js": "^1.0.15",
     "lucide-react": "^0.468.0",
-    "next": "16.0.1",
+    "next": "^16.2.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
@@ -44,8 +44,7 @@
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.22.4",
-    "zustand": "^5.0.13"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

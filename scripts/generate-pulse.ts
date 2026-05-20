@@ -4,8 +4,68 @@ import path from "node:path";
 import { config as loadDotenv } from "dotenv";
 import { openDb, migrate, createPulse, insertPulseItem, getPulseItems, updatePulseStatus, listPulses, addUsageCost } from "../lib/pulse/db";
 import { buildPreferences, writePreferencesFile, type Preferences } from "../lib/pulse/preferences";
-import { rankCandidates, type Candidate, type RankerLLMResponse } from "../lib/pulse/ranker";
+import { rankCandidates, passthroughRank, type Candidate, type RankerLLMResponse } from "../lib/pulse/ranker";
 import { buildPulseOrchestratorConfig } from "../lib/pulse/config";
+
+type ValidSource = "paper" | "news" | "github" | "x";
+
+const SOURCE_ALIASES: Record<string, ValidSource> = {
+  paper: "paper",
+  papers: "paper",
+  arxiv: "paper",
+  research: "paper",
+  news: "news",
+  blog: "news",
+  announcement: "news",
+  github: "github",
+  gh: "github",
+  repo: "github",
+  x: "x",
+  twitter: "x",
+  tweet: "x",
+};
+
+function sourceFromUrl(url: string): ValidSource | null {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com")) return "x";
+    if (host === "arxiv.org" || host.endsWith(".arxiv.org")) return "paper";
+    if (host === "github.com" || host.endsWith(".github.com")) return "github";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSource(raw: unknown, url: string, fallback: ValidSource = "news"): ValidSource {
+  const fromUrl = sourceFromUrl(url);
+  if (fromUrl) return fromUrl;
+  if (typeof raw !== "string") return fallback;
+  return SOURCE_ALIASES[raw.toLowerCase().trim()] ?? fallback;
+}
+
+function normalizeCandidates(cands: Candidate[]): Candidate[] {
+  let fixed = 0;
+  const out = cands.map((c) => {
+    const norm = normalizeSource(c.source as unknown, c.url, "news");
+    if (norm !== c.source) fixed += 1;
+    return { ...c, source: norm };
+  });
+  if (fixed > 0) console.log(`[pulse] normalized ${fixed} candidate source(s) to valid enum`);
+  return out;
+}
+
+function neutralPreferences(): Preferences {
+  return {
+    generated_at: new Date().toISOString(),
+    window_days: 30,
+    samples: { liked: [], disliked: [], bookmarked: [], expanded_but_no_signal: [] },
+    counts: { liked: 0, disliked: 0, bookmarked: 0 },
+    source_weights: { paper: 0.4, news: 0.3, github: 0.2, x: 0.1 },
+    topic_signals: { loved: [], avoided: [] },
+    cold_start: true,
+  };
+}
 
 loadDotenv({ path: path.resolve(process.cwd(), ".env.local") });
 
@@ -15,6 +75,7 @@ const DB_PATH = path.resolve(DATA_DIR, "pulse.db");
 const PREFS_PATH = path.resolve(DATA_DIR, "preferences.json");
 const MAX_BUDGET = parseFloat(process.env.MAX_BUDGET_USD ?? "2.0");
 const MAX_TURNS = parseInt(process.env.MAX_TURNS ?? "40", 10);
+const USE_PREFERENCES = (process.env.PULSE_USE_PREFERENCES ?? "true").toLowerCase() !== "false";
 
 function localDateKey(d: Date = new Date()): string {
   const y = d.getFullYear();
@@ -60,9 +121,13 @@ async function main() {
   const generated_at = new Date().toISOString();
 
   console.log(`[pulse] generating for ${date_key}`);
-  const prefs = buildPreferences(db, { now: new Date(), windowDays: 30 });
+  const prefs = USE_PREFERENCES
+    ? buildPreferences(db, { now: new Date(), windowDays: 30 })
+    : neutralPreferences();
   writePreferencesFile(PREFS_PATH, prefs);
-  console.log(`[pulse] preferences written (cold_start=${prefs.cold_start}, liked=${prefs.counts.liked})`);
+  console.log(
+    `[pulse] preferences written (use_preferences=${USE_PREFERENCES}, cold_start=${prefs.cold_start}, liked=${prefs.counts.liked})`
+  );
 
   let pulse_id: number;
   try {
@@ -106,7 +171,7 @@ async function main() {
     let candidates: Candidate[] = [];
     try {
       const parsed = extractCandidatesFromAgentOutput(agentText);
-      candidates = parsed.candidates ?? [];
+      candidates = normalizeCandidates(parsed.candidates ?? []);
       if (candidates.length === 0) status = "partial";
     } catch (e) {
       console.error("[pulse] could not parse orchestrator JSON:", e);
@@ -117,12 +182,15 @@ async function main() {
       .flatMap((p) => getPulseItems(db, p.id))
       .map((i) => i.url);
 
-    const ranked = await rankCandidates({
-      candidates,
-      preferences: prefs,
-      recentPulseUrls: recentUrls,
-      queryLLM: callRankerLLM,
-    });
+    const ranked = USE_PREFERENCES
+      ? await rankCandidates({
+          candidates,
+          preferences: prefs,
+          recentPulseUrls: recentUrls,
+          queryLLM: callRankerLLM,
+        })
+      : passthroughRank(candidates, recentUrls);
+    console.log(`[pulse] ranking done (mode=${USE_PREFERENCES ? "llm" : "passthrough"}, items=${ranked.length})`);
 
     for (const item of ranked) {
       try {

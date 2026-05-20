@@ -6,7 +6,6 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import type { ClientPulseItem } from "./types";
-import { FeedbackStrip } from "./FeedbackStrip";
 
 interface Props {
   item: ClientPulseItem;
@@ -76,9 +75,6 @@ export function PulseCard({ item }: Props) {
       <article className="bg-parchment border border-parchment-dark shadow-sm p-6 mb-6">
         <div className="flex gap-2 mb-3">
           <span className={`pulse-pill ${src.cls}`}>{src.text}</span>
-          <span className="pulse-pill text-zinc-700 border-zinc-400">
-            {item.complexity.toUpperCase()}
-          </span>
           {item.priority === "high" && (
             <span className="pulse-pill text-goldpill border-goldpill">★ Essential</span>
           )}
@@ -87,7 +83,7 @@ export function PulseCard({ item }: Props) {
         <h2 className="font-serif text-2xl leading-tight mb-2">{item.title}</h2>
 
         <div className="pulse-mono text-xs uppercase tracking-wider mb-4 text-zinc-600">
-          {item.source.toUpperCase()} · {item.outlet ?? "—"} · {item.read_minutes ?? "?"} MIN READ
+          {item.source.toUpperCase()} · {item.outlet ?? "—"}
         </div>
 
         <blockquote className="pulse-pullquote my-4 text-base">› {item.summary}</blockquote>
@@ -98,38 +94,6 @@ export function PulseCard({ item }: Props) {
         >
           ▶ Read full
         </button>
-
-        <div className="grid grid-cols-3 gap-6 my-4">
-          <div>
-            <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">Match</div>
-            <div className="pulse-mono text-base text-brick">
-              {"■".repeat(item.match_score)}
-              {"□".repeat(5 - item.match_score)}
-            </div>
-          </div>
-          <div>
-            <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">
-              Complexity
-            </div>
-            <div className="font-serif">{item.complexity}</div>
-          </div>
-          <div>
-            <div className="pulse-mono text-xs uppercase tracking-wider text-zinc-600">
-              Read Time
-            </div>
-            <div className="font-serif">{item.read_minutes ?? "?"} min</div>
-          </div>
-        </div>
-
-        <div className="flex gap-2 flex-wrap mb-2">
-          {item.topics.map((t) => (
-            <span key={t} className="pulse-pill text-zinc-600 border-zinc-400">
-              {t}
-            </span>
-          ))}
-        </div>
-
-        <FeedbackStrip item={item} />
       </article>
 
       {open && (
@@ -163,9 +127,6 @@ export function PulseCard({ item }: Props) {
 
             <div className="flex gap-2 mb-3 pr-16">
               <span className={`pulse-pill ${src.cls}`}>{src.text}</span>
-              <span className="pulse-pill text-zinc-700 border-zinc-400">
-                {item.complexity.toUpperCase()}
-              </span>
               {item.priority === "high" && (
                 <span className="pulse-pill text-goldpill border-goldpill">★ Essential</span>
               )}

@@ -1,328 +1,249 @@
 # Deep AI Research Agent
 
-A Claude-powered research assistant built with Next.js 16, TypeScript, and the Claude Agent SDK for discovering, analyzing, and synthesizing AI research papers.
+A Claude-powered application with two surfaces:
 
-![Phase 1](https://img.shields.io/badge/Phase-1-blue)
-![Next.js](https://img.shields.io/badge/Next.js-16.0.1-black)
+- **Daily Pulse** at `/pulse` — a scheduled job that wakes up each morning, dispatches four curator subagents in parallel, and assembles a deduplicated feed of the day's AI/ML papers, GitHub repos, tweets, and Hacker News stories into a SQLite-backed history.
+- **Research Agent** at `/` — an interactive one-shot research interface. Type a query, watch the agent's tool calls stream live via SSE, get a citation-rich markdown report when it finishes.
+
+![Next.js](https://img.shields.io/badge/Next.js-16.2.6-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
-![Claude](https://img.shields.io/badge/Claude-Sonnet%204.5-orange)
+![Claude Agent SDK](https://img.shields.io/badge/Claude%20Agent%20SDK-0.1.37-orange)
 
-## Overview
+## How the Daily Pulse works
 
-This application provides an intelligent research interface powered by Claude Agent SDK, featuring:
+```
+  scripts/generate-pulse.ts (cron via launchd)
+              │
+              ▼
+  Orchestrator agent  (claude-haiku-4-5-20251001)
+              │  dispatches 4 subagents in parallel via Task
+              │
+   ┌──────────┼──────────┬──────────┐
+   ▼          ▼          ▼          ▼
+ paper      gh-       x-         hn-
+ curator    curator   curator    curator
+ (Exa →     (GitHub   (X recent  (HN
+  arXiv)    Search)    search)    firebase)
+   │          │          │          │
+   └──────────┼──────────┼──────────┘
+              ▼
+       dedupe by URL
+              │
+              ▼
+    URL-pattern source normalizer
+    (x.com→x, arxiv.org→paper, github.com→github)
+              │
+              ▼
+   ┌──────────┴──────────┐
+   │                      │
+   ▼                      ▼
+ LLM ranker          passthroughRank
+ (preferences on)    (preferences off)
+   │                      │
+   └──────────┬───────────┘
+              ▼
+        SQLite (data/pulse.db)
+              │
+              ▼
+       Web UI at /pulse/<date>
+```
 
-- **Exa Neural Search**: Semantic search for discovering academic papers and research
-- **Real-time Progress Tracking**: Live updates on research progress with tool call visualization
-- **Comprehensive Reports**: AI-generated markdown reports with citations
-- **Modern Dashboard**: Built with shadcn/ui and Tailwind CSS
-- **Agent Architecture**: Orchestrator agent with custom tool integration
+### Sources
 
-## Features
+| Curator | Source | Tool |
+|---|---|---|
+| `paper-curator` | arXiv via Exa neural search (last 24h) | `mcp__exa-search__search` |
+| `gh-curator` | GitHub Search API — repos created in last 36h with AI keywords + stars > 3 | `mcp__github-trending__list_trending` |
+| `x-curator` | X/Twitter recent-search filtered to a curated list of ~20 AI accounts (requires `X_BEARER_TOKEN`) | `mcp__x-trending__list_recent_tweets` |
+| `hn-curator` | Hacker News firebase API — top stories filtered by AI keywords in title, min 30 points | `mcp__hn-trending__list_trending` |
 
-### 🔍 Intelligent Research
-- Neural search powered by Exa for semantic understanding
-- Content retrieval from academic papers and articles
-- Similarity search to find related work
-- Multi-source synthesis and analysis
+A fifth curator (`news-curator`, Exa-based) for curated AI lab blogs exists in the codebase but is **currently unregistered from the dispatch list** because Exa's host-only domain filter pulled in too much noise. See `lib/pulse/subagents/news-curator.ts` to re-enable.
 
-### 📊 Real-time Progress Tracking
-- Live streaming of research progress via Server-Sent Events (SSE)
-- Visual indicators for current research stage
-- Detailed tool call timeline with collapsible details
-- Statistics dashboard (searches, fetches, total steps)
+### Ranking
 
-### 📝 Report Generation
-- Comprehensive markdown reports with syntax highlighting
-- Metadata tracking (duration, cost, API usage)
-- Copy to clipboard functionality
-- Download as Markdown or export as JSON
+The orchestrator's deduplicated candidate set goes through one of two paths:
+
+- **`PULSE_USE_PREFERENCES=true`** — calls Claude Haiku once with the candidates + your liked/disliked history + recent-30-day URLs and produces a top-10 ranking with `priority`, `match_score`, `complexity`, `read_minutes`.
+- **`PULSE_USE_PREFERENCES=false`** *(default in `.env.local`)* — skips the ranker LLM entirely, dedupes against the recent 30-day URL window, and inserts every remaining candidate with neutral defaults. Used while collecting feedback signal.
+
+## How the Research Agent works
+
+The home page (`/`) accepts a single research query, posts it to `app/api/agent/query/route.ts`, and streams the Claude Agent SDK message events back via Server-Sent Events. The `ProgressTracker` component renders live tool calls; when the agent emits a `result` message, `FinalReport` shows the synthesized markdown.
 
 ## Quick Start
 
 ### Prerequisites
 
-- **Node.js** 20+ ([Download](https://nodejs.org/))
-- **Anthropic API Key** ([Get one here](https://console.anthropic.com/))
-- **Exa API Key** ([Get one here](https://exa.ai/))
+- Node.js 20+
+- Anthropic API key — <https://console.anthropic.com/>
+- Exa API key — <https://exa.ai/>
+- *(Optional)* X/Twitter API bearer token — <https://developer.x.com/> (requires API credits)
 
-### Installation
+### Install
 
-1. **Clone the repository**:
 ```bash
-git clone https://github.com/dair-ai/deep-ai-research.git
+git clone <repo-url>
 cd deep-ai-research
-```
-
-2. **Install dependencies**:
-```bash
 npm install
-```
-
-3. **Configure environment variables**:
-
-Copy the example environment file and add your API keys:
-
-```bash
-cp .env.example .env.local
-```
-
-Then edit `.env.local` and add your API keys:
-
-```bash
-# Anthropic API Key (required)
-# Get your key at: https://console.anthropic.com/
-ANTHROPIC_API_KEY=sk-ant-api03-your-actual-key-here
-
-# Exa API Key (required for search functionality)
-# Get your key at: https://exa.ai/
-EXA_API_KEY=your-actual-exa-key-here
-
-# Optional: Default model
-DEFAULT_MODEL=claude-haiku-4-5-20251001
-
-# Optional: Budget limits (in USD)
-MAX_BUDGET_USD=2.0
-
-# Optional: Max turns per conversation
-MAX_TURNS=20
-```
-
-4. **Run the development server**:
-```bash
+cp .env.example .env.local  # then edit with your keys
 npm run dev
 ```
 
-5. **Open the app**:
-Navigate to [http://localhost:3001](http://localhost:3001)
+Open <http://localhost:3000>.
 
-> **Note**: The app will use port 3001 if port 3000 is already in use.
+### `.env.local`
 
-## Usage
+```bash
+# Required
+ANTHROPIC_API_KEY=sk-ant-...
+EXA_API_KEY=...
 
-### Example Queries
-
-Try these research queries to see the agent in action:
-
-- "Find latest papers on multimodal LLMs"
-- "What are emerging trends in reinforcement learning?"
-- "Explain mixture of experts in modern LLMs"
-- "Recent advances in attention mechanisms"
-- "The latest papers on multi-agent systems"
-
-### Understanding the Interface
-
-**Progress Tab**:
-- Shows real-time research progress
-- Displays current stage (searching, fetching, analyzing, etc.)
-- Statistics panel with search counts
-- Timeline of all tool calls (expandable for details)
-
-**Final Report Tab**:
-- Activated when research is complete
-- Markdown-formatted comprehensive report
-- Citations and references
-- Metadata (cost, duration, API usage)
-- Export options (copy, download MD, export JSON)
-
-## Architecture
-
-```
-┌─────────────────────────────────┐
-│   Claude Orchestrator Agent     │
-│   (claude-haiku-4-5-20251001)  │
-└──────────────┬──────────────────┘
-               │
-       ┌───────┴────────┐
-       │                │
-       ▼                ▼
-┌─────────────┐  ┌─────────────┐
-│ Exa Search  │  │ File Tools  │
-│ - search    │  │ - Read      │
-│ - contents  │  │ - Write     │
-│ - similar   │  │ - Edit      │
-└─────────────┘  └─────────────┘
+# Optional
+X_BEARER_TOKEN=...                    # x-curator returns [] without this
+DEFAULT_MODEL=claude-haiku-4-5-20251001
+MAX_BUDGET_USD=2.0                    # per-pulse-run budget cap
+MAX_TURNS=20                          # orchestrator turn cap
+PULSE_USE_PREFERENCES=false           # skip LLM ranker, insert all candidates
 ```
 
-**Current Phase**: Phase 1 - Exa Neural Search Integration
+## Daily Pulse — generation & scheduling
 
-**Agent Memory**: Uses `CLAUDE.md` for comprehensive research instructions and workflows
+### Generate a pulse now
 
-## Project Structure
+```bash
+npm run pulse:generate
+```
+
+Writes one row to `pulses` and N rows to `pulse_items` in `data/pulse.db`. The date-key (`YYYY-MM-DD`) is unique per day — re-running for the same day aborts unless you delete the existing row.
+
+### Schedule via launchd (macOS)
+
+```bash
+./scripts/install-launchd.sh         # installs com.user.daily-pulse.plist
+./scripts/uninstall-launchd.sh       # removes it
+```
+
+## Storage
+
+SQLite at `data/pulse.db`:
+
+| Table | What it holds |
+|---|---|
+| `pulses` | one row per day (id, date_key, item_count, status, cost_usd, duration_ms) |
+| `pulse_items` | individual items (rank, source, title, url, summary, outlet, topics, source_meta JSON) |
+| `feedback` | retained for historical signal (write surface was removed; preferences.ts still reads from it if you re-enable preferences) |
+| `usage` | per-day cost accumulator |
+
+## Project structure
 
 ```
 deep-ai-research/
-├── app/                           # Next.js App Router
-│   ├── api/
-│   │   └── agent/
-│   │       └── query/
-│   │           └── route.ts       # SSE streaming endpoint
-│   ├── page.tsx                   # Main dashboard UI
-│   ├── layout.tsx                 # Root layout
-│   └── globals.css                # Global styles
+├── app/
+│   ├── page.tsx                       # Research Agent home (/)
+│   ├── layout.tsx
+│   ├── pulse/
+│   │   ├── page.tsx                   # Latest pulse view (/pulse)
+│   │   └── [date]/page.tsx            # Historical pulse view (/pulse/YYYY-MM-DD)
+│   └── api/
+│       ├── agent/query/route.ts       # SSE research-query endpoint
+│       ├── agent/session/route.ts
+│       └── pulse/
+│           ├── today/route.ts         # JSON of today's pulse
+│           ├── history/route.ts       # Last 30 pulses
+│           ├── expand/route.ts        # Lazy-fetch body_md via Exa for a given item
+│           ├── ask/route.ts           # "Ask agent about this item" endpoint
+│           └── generate/route.ts      # HTTP trigger to run pulse:generate
 │
-├── components/                    # React components
-│   ├── ui/                        # shadcn/ui components
-│   ├── ProgressTracker.tsx        # Research progress display
-│   ├── ToolCallSummary.tsx        # Tool call visualization
-│   └── FinalReport.tsx            # Report renderer
+├── components/
+│   ├── pulse/                         # PulseCard, PulseFeed, PulseShell,
+│   │                                  # PulseHeader, HistoryList, AskAgentBox,
+│   │                                  # QuickActions, types.ts
+│   ├── ui/                            # shadcn-style Radix primitives
+│   ├── ProgressTracker.tsx            # Research Agent tool-call timeline
+│   ├── FinalReport.tsx                # Research Agent markdown renderer
+│   └── ToolCallSummary.tsx
 │
-├── lib/                           # Core libraries
+├── lib/
 │   ├── agent/
-│   │   ├── config.ts              # Agent configuration
-│   │   ├── tools.ts               # Exa MCP tools
-│   │   └── agents/                # Subagent definitions (Phase 2)
-│   ├── types/
-│   │   └── agent.ts               # TypeScript type definitions
-│   └── utils.ts                   # Utility functions
+│   │   ├── config.ts                  # Research Agent config (single-agent)
+│   │   ├── tools.ts                   # Exa MCP tools (search, contents, similar)
+│   │   └── agents.ts                  # Optional subagent definitions
+│   ├── pulse/
+│   │   ├── config.ts                  # Pulse orchestrator config (4-curator)
+│   │   ├── db.ts                      # SQLite migrations + repository
+│   │   ├── preferences.ts             # Build preferences from feedback rows
+│   │   ├── ranker.ts                  # rankCandidates + passthroughRank
+│   │   ├── tools/
+│   │   │   ├── github-trending.ts     # GitHub Search MCP tool
+│   │   │   ├── x-trending.ts          # X recent-search MCP tool
+│   │   │   └── hn-trending.ts         # HN firebase API MCP tool
+│   │   └── subagents/
+│   │       ├── index.ts               # Registered: paper, gh, x, hn
+│   │       ├── paper-curator.ts
+│   │       ├── gh-curator.ts
+│   │       ├── x-curator.ts
+│   │       ├── hn-curator.ts
+│   │       └── news-curator.ts        # Unregistered (Exa noise issues)
+│   ├── types/agent.ts
+│   └── utils.ts
 │
-├── .claude/                       # Claude Code config
-│   ├── agents/                    # Future subagent definitions
-│   └── settings.json              # Agent settings
+├── scripts/
+│   ├── generate-pulse.ts              # Main pulse runner
+│   ├── install-launchd.sh             # macOS schedule install
+│   ├── uninstall-launchd.sh
+│   └── com.user.daily-pulse.plist.template
 │
-├── CLAUDE.md                      # Agent memory & instructions
-├── .env.local                     # Environment variables (create this)
-└── package.json                   # Dependencies
+├── data/                              # SQLite + preferences.json (gitignored)
+├── .claude/                           # Claude Code config
+├── CLAUDE.md
+├── next.config.ts                     # turbopack.root pinned to project dir
+└── package.json
 ```
 
-## Technologies
+## Tech stack
 
-- **Framework**: [Next.js 16.0.1](https://nextjs.org/) (App Router)
-- **Language**: [TypeScript 5](https://www.typescriptlang.org/)
-- **Agent SDK**: [@anthropic-ai/claude-agent-sdk v0.1.37](https://github.com/anthropics/anthropic-sdk-typescript)
-- **Search**: [Exa API](https://exa.ai/)
-- **UI Library**: [shadcn/ui](https://ui.shadcn.com/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **Icons**: [Lucide React](https://lucide.dev/)
-- **Markdown**: [react-markdown](https://github.com/remarkjs/react-markdown) with syntax highlighting
+| Layer | Tech |
+|---|---|
+| Framework | [Next.js 16.2.6](https://nextjs.org/) (App Router + Turbopack) |
+| Language | TypeScript 5 |
+| Agent runtime | [@anthropic-ai/claude-agent-sdk](https://github.com/anthropics/anthropic-sdk-typescript) v0.1.37 |
+| Models | `claude-haiku-4-5-20251001` by default (orchestrator + ranker + Research Agent — driven by the `DEFAULT_MODEL` env) |
+| Search | [Exa](https://exa.ai/) (`exa-js`), GitHub Search API, X recent-search v2, HN firebase API |
+| Storage | SQLite via `better-sqlite3` |
+| UI | Tailwind CSS + Radix primitives, `react-markdown` + `remark-gfm` + `rehype-highlight` |
+| Testing | Vitest + happy-dom |
 
-## Development
-
-### Available Scripts
+## Available scripts
 
 ```bash
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Run linting
+npm run dev                # Next.js dev server (Turbopack)
+npm run build              # Production build
+npm start                  # Run production build
 npm run lint
-```
-
-### Key Files to Understand
-
-1. **`app/api/agent/query/route.ts`**: API endpoint that handles research queries and streams responses via SSE
-2. **`lib/agent/config.ts`**: Agent configuration including tools, prompts, and settings
-3. **`lib/agent/tools.ts`**: Exa search tool definitions using MCP (Model Context Protocol)
-4. **`CLAUDE.md`**: Agent memory file with research workflows and best practices
-5. **`components/ProgressTracker.tsx`**: Extracts and displays research progress from message stream
-
-### Adding Custom Tools
-
-To add new tools to the agent:
-
-1. Define the tool in `lib/agent/tools.ts` using `createSdkMcpServer` and `tool`
-2. Add the MCP server to `mcpServers` in `lib/agent/config.ts`
-3. Add tool names to `allowedTools` array (format: `mcp__<server-name>__<tool-name>`)
-4. Update UI components to recognize the new tools (icons, colors, stage mapping)
-
-Example:
-```typescript
-const myToolsServer = createSdkMcpServer({
-  name: "my-tools",
-  version: "1.0.0",
-  tools: [
-    tool(
-      "my_tool",
-      "Description of what the tool does",
-      { /* zod schema */ },
-      async (args) => { /* implementation */ }
-    )
-  ]
-});
+npm test                   # vitest run
+npm run test:watch
+npm run test:coverage
+npm run pulse:generate     # One-shot pulse generation
+npm run test:agent         # Research Agent integration test
 ```
 
 ## Troubleshooting
 
-### Common Issues
+**"pulse for YYYY-MM-DD already exists; aborting"**
+A pulse for today's date_key already landed. Delete the row (and its items) from `data/pulse.db` to allow a re-run, or wait until tomorrow.
 
-**Port already in use**:
-- The app will automatically try port 3001 if 3000 is busy
-- Or manually specify: `PORT=3002 npm run dev`
+**`x-curator` returns 0 items**
+Either `X_BEARER_TOKEN` is unset, or your X API account is out of credits (HTTP 402). The tool silently returns `[]` on any non-2xx X API response (`lib/pulse/tools/x-trending.ts`).
 
-**API Key errors**:
-- Ensure `.env.local` is created in the root directory
-- Verify API keys are valid and not expired
-- Check keys don't have leading/trailing spaces
+**Module-not-found after `npm install` / `npm audit fix`**
+Clear Next.js cache and restart the dev server:
+```bash
+rm -rf .next && npm run dev
+```
 
-**Build errors**:
-- Clear Next.js cache: `rm -rf .next`
-- Delete node_modules and reinstall: `rm -rf node_modules && npm install`
-- Check Node.js version: `node --version` (should be 20+)
-
-**Agent not responding**:
-- Check browser console for errors
-- Verify API endpoint is working: `curl http://localhost:3001/api/agent/query`
-- Review server logs in terminal
-
-### Debug Mode
-
-Enable verbose logging by checking the terminal output where `npm run dev` is running. All agent messages and tool calls are logged.
-
-## Roadmap
-
-### Phase 1 (Current) ✅
-- [x] Next.js + TypeScript setup
-- [x] Claude Agent SDK integration
-- [x] Exa neural search tools
-- [x] Dashboard UI with real-time progress
-- [x] SSE streaming
-- [x] Report generation and export
-- [x] Tool call visualization
-
-### Phase 2 (Planned)
-- [ ] Specialized subagents (web-researcher, analyzer, report-generator)
-- [ ] Multi-agent orchestration
-- [ ] Research database for session persistence
-- [ ] Advanced filtering and search options
-- [ ] PDF export capabilities
-- [ ] Citation management
-- [ ] Collaborative research sessions
-
-## Contributing
-
-Contributions are welcome! To contribute:
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make your changes and test thoroughly
-4. Commit with clear messages: `git commit -m "Add: feature description"`
-5. Push to your fork: `git push origin feature/my-feature`
-6. Open a Pull Request
-
-### Areas for Contribution
-
-- Additional search integrations (arXiv API, Semantic Scholar, etc.)
-- Enhanced UI components and visualizations
-- Export formats (PDF, LaTeX, BibTeX)
-- Testing infrastructure
-- Documentation improvements
-- Performance optimizations
+**Build / Turbopack workspace root error**
+Make sure `next.config.ts` is present and sets `turbopack.root` to the project directory.
 
 ## License
 
-MIT License - see LICENSE file for details
-
-## Acknowledgments
-
-- Built with [Claude Agent SDK](https://github.com/anthropics/anthropic-sdk-typescript)
-- Search powered by [Exa](https://exa.ai/)
-- UI components from [shadcn/ui](https://ui.shadcn.com/)
-
----
-
-**Built with Claude Code** 🤖
+MIT

@@ -179,6 +179,21 @@ function topUpFromRemainder(
   return out;
 }
 
+export function passthroughRank(
+  candidates: Candidate[],
+  recentPulseUrls: string[]
+): RankedItem[] {
+  const filtered = dedupeAndDrop(candidates, recentPulseUrls);
+  return filtered.map((c, i) => ({
+    ...c,
+    rank: i + 1,
+    priority: "medium",
+    match_score: 3,
+    complexity: "intermediate",
+    read_minutes: 5,
+  }));
+}
+
 export async function rankCandidates(input: RankInput): Promise<RankedItem[]> {
   const filtered = dedupeAndDrop(input.candidates, input.recentPulseUrls);
   if (filtered.length === 0) return [];

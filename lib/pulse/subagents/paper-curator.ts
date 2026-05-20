@@ -37,6 +37,11 @@ export const paperCurator: AgentDefinition = {
   }
 ]
 \`\`\`
+
+**CRITICAL — DO NOT VIOLATE:**
+- The "source" field must be the literal string "paper" — NOT "arxiv", NOT "arXiv", NOT "research". Always "paper".
+- The "outlet" field is where you put "arXiv". Do not confuse the two.
+
 If no papers found, return [].`,
   tools: [
     "mcp__exa-search__search",

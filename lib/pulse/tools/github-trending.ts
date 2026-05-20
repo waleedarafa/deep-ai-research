@@ -15,12 +15,15 @@ export interface FetchOptions {
   limit: number;
 }
 
-const TOPICS = ["llm", "ai", "agents", "ml", "rag"];
+const KEYWORDS = ["llm", "ai", "agent", "rag", "ml"];
+const MIN_STARS = 3;
 
 function buildSearchUrl(opts: FetchOptions): string {
   const dateStr = opts.since.toISOString().slice(0, 10);
-  const topicAlts = TOPICS.map((t) => `topic:${t}`).join(" OR ");
-  const q = encodeURIComponent(`created:>${dateStr} (${topicAlts})`);
+  const keywordAlts = KEYWORDS.join(" OR ");
+  const q = encodeURIComponent(
+    `created:>${dateStr} stars:>${MIN_STARS} ${keywordAlts}`
+  );
   return `https://api.github.com/search/repositories?q=${q}&sort=stars&order=desc&per_page=${opts.limit}`;
 }
 

@@ -2,6 +2,7 @@ import type { AgentConfig } from "../types/agent";
 import { exaSearchTools } from "../agent/tools";
 import { githubTrendingTools } from "./tools/github-trending";
 import { xTrendingTools } from "./tools/x-trending";
+import { hnTrendingTools } from "./tools/hn-trending";
 import { pulseSubagents } from "./subagents";
 
 export interface PulseConfigInput {
@@ -27,9 +28,9 @@ collect their JSON outputs, deduplicate by URL, and return the merged candidate 
 **Procedure:**
 1. Use the Task tool to dispatch these subagents IN PARALLEL (single message, four tool calls):
    - paper-curator
-   - news-curator
    - gh-curator
    - x-curator
+   - hn-curator
 2. Each subagent returns a JSON array of candidates. Concatenate.
 3. Dedupe by 'url' (case-insensitive, strip trailing slash + utm params).
 4. Read the user's preferences file at: ${input.preferencesPath}
@@ -47,6 +48,7 @@ Return ONLY this JSON, no prose. The calling script handles ranking and DB write
       "exa-search": exaSearchTools,
       "github-trending": githubTrendingTools,
       "x-trending": xTrendingTools,
+      "hn-trending": hnTrendingTools,
     },
     agents: pulseSubagents,
     allowedTools: [
@@ -56,6 +58,7 @@ Return ONLY this JSON, no prose. The calling script handles ranking and DB write
       "mcp__exa-search__get_contents",
       "mcp__github-trending__list_trending",
       "mcp__x-trending__list_recent_tweets",
+      "mcp__hn-trending__list_trending",
     ],
     permissionMode: "default",
     maxBudgetUsd: input.maxBudgetUsd,
