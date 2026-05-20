@@ -15,8 +15,10 @@ export interface HNStory {
 
 const HN_API = "https://hacker-news.firebaseio.com/v0";
 
-const AI_KEYWORDS = [
-  "ai",
+// Word-boundary patterns: each entry is matched as a whole token (with \b) so
+// "ai" does not match "rain"/"Spain"/"explain". Multi-word phrases are matched
+// literally with surrounding word boundaries.
+const AI_KEYWORD_PATTERNS = [
   "llm",
   "llms",
   "gpt",
@@ -32,24 +34,31 @@ const AI_KEYWORDS = [
   "agents",
   "rag",
   "transformer",
+  "transformers",
   "diffusion",
-  "neural",
-  "embedding",
-  "fine-tun",
-  "ml",
+  "huggingface",
+  "ai safety",
+  "ai model",
+  "ai models",
+  "ai agent",
+  "ai agents",
   "machine learning",
   "deep learning",
-  "huggingface",
-  "vector",
-  "prompt",
-  "inference",
-  "model",
-  "training",
+  "neural network",
+  "neural networks",
+  "fine-tuning",
+  "ai-generated",
+  // standalone "ai" handled with strict word boundaries below
+  "\\bai\\b",
 ];
 
+const AI_TITLE_REGEX = new RegExp(
+  `\\b(?:${AI_KEYWORD_PATTERNS.map((p) => (p.startsWith("\\b") ? p.slice(2, -2) : p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")})\\b`,
+  "i"
+);
+
 function titleMatchesAI(title: string): boolean {
-  const lower = title.toLowerCase();
-  return AI_KEYWORDS.some((kw) => lower.includes(kw));
+  return AI_TITLE_REGEX.test(title);
 }
 
 export interface FetchHNOptions {
@@ -122,7 +131,7 @@ export const hnTrendingTools = createSdkMcpServer({
       {
         since_hours: z.number().min(1).max(168).default(36),
         limit: z.number().min(1).max(20).default(8),
-        min_score: z.number().min(0).max(2000).default(30),
+        min_score: z.number().min(0).max(2000).default(50),
       },
       async (args) => {
         const stories = await fetchTrendingAIStories({

@@ -2,26 +2,20 @@ import type { AgentDefinition } from "../../types/agent";
 
 export const paperCurator: AgentDefinition = {
   description:
-    "Finds recent AI/ML research papers from arXiv using Exa neural search. Returns structured JSON.",
+    "Curates the day's top AI/ML papers from HuggingFace Daily Papers (editorial + community-voted).",
   prompt: `You are the paper-curator subagent for the Daily Pulse pipeline.
 
-**Goal:** Return 10-15 AI/ML papers published in the last 24 hours.
+**Goal:** Return 10-15 high-signal AI/ML papers from the HuggingFace Daily Papers feed.
+HuggingFace Daily Papers is an editorial + community-voted curation of the day's most important
+arXiv submissions. Upvotes act as a quality signal — the tool already pre-sorts by upvote count.
 
-**Tools:**
-- mcp__exa-search__search: neural search with start_published_date filter
-- mcp__exa-search__get_contents: pull abstracts when needed
+**Tool:** mcp__hf-papers__list_daily_papers (no Exa, no fallback)
 
 **Procedure:**
-1. Call mcp__exa-search__search with:
-   - type: "neural"
-   - num_results: 20
-   - include_domains: ["arxiv.org"]
-   - start_published_date: today minus 1 day (YYYY-MM-DD)
-   - use_autoprompt: true
-   - query: "recent AI machine learning paper" (broad)
-2. For each result, extract: title, url, abstract/summary, authors, published_date, arxiv_id.
-3. Skip survey papers unless they reference >=3 results from this week.
-4. Return a JSON array conforming to the CandidateItem schema below.
+1. Call mcp__hf-papers__list_daily_papers with limit=15, min_upvotes=1.
+2. For each paper, transform to the candidate schema below. Use the tool's ai_summary if present,
+   otherwise the raw summary, truncated to 2-4 sentences.
+3. Topics: copy ai_keywords from the tool, lowercase + kebab-case-ified (e.g., "Image Editing" -> "image-editing").
 
 **Output schema (return ONLY this JSON, no prose):**
 \`\`\`json
@@ -29,23 +23,26 @@ export const paperCurator: AgentDefinition = {
   {
     "title": "string",
     "url": "https://arxiv.org/abs/...",
-    "summary": "2-4 sentence abstract digest",
+    "summary": "2-4 sentence digest",
     "outlet": "arXiv",
     "source": "paper",
-    "topics": ["short", "kebab-case", "tags"],
-    "source_meta": { "authors": ["..."], "published_date": "YYYY-MM-DD", "arxiv_id": "..." }
+    "topics": ["kebab-case", "tags"],
+    "source_meta": {
+      "arxiv_id": "...",
+      "upvotes": 0,
+      "authors": ["..."],
+      "organization": "...",
+      "published_date": "YYYY-MM-DD"
+    }
   }
 ]
 \`\`\`
 
 **CRITICAL — DO NOT VIOLATE:**
-- The "source" field must be the literal string "paper" — NOT "arxiv", NOT "arXiv", NOT "research". Always "paper".
-- The "outlet" field is where you put "arXiv". Do not confuse the two.
+- The "source" field must be the literal string "paper" — NOT "arxiv", NOT "arXiv", NOT "research".
+- The "outlet" field is "arXiv".
 
-If no papers found, return [].`,
-  tools: [
-    "mcp__exa-search__search",
-    "mcp__exa-search__get_contents",
-  ],
+If the tool returns [], return [].`,
+  tools: ["mcp__hf-papers__list_daily_papers"],
   model: "haiku",
 };

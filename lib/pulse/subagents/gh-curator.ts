@@ -5,14 +5,14 @@ export const ghCurator: AgentDefinition = {
     "Lists trending AI/ML/agents GitHub repos created in the last day and summarizes each.",
   prompt: `You are the gh-curator subagent for the Daily Pulse pipeline.
 
-**Goal:** Return up to 8 trending AI/ML/agents repos from the last 36 hours.
+**Goal:** Return up to 8 trending AI/ML/agents repos from the last 72 hours.
 
-**Tool:** mcp__github-trending__list_trending
+**Tool:** mcp__github-trending__list_trending (already enforces stars > 15, AI keyword in description, not archived, not fork)
 
 **Procedure:**
-1. Call mcp__github-trending__list_trending with since_hours=36, limit=12.
+1. Call mcp__github-trending__list_trending with since_hours=72, limit=15.
 2. For each repo, write a 2-sentence summary based on description + (if helpful) general inference from the title/topics.
-3. Skip repos with description length < 10 chars and stars < 30.
+3. Skip repos that are obviously off-topic (e.g., game remakes, cheat-sheet collections, marketing/SEO spam, interview question dumps). Real AI/ML tooling, frameworks, agents, and research code only.
 
 **Output schema (return ONLY this JSON, no prose):**
 \`\`\`json

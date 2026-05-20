@@ -38,6 +38,8 @@ export const CURATED_X_ACCOUNTS: readonly string[] = [
   "togethercompute",
 ];
 
+const DISCOVERY_KEYWORDS = ["LLM", "Anthropic", "Claude", "GPT", "OpenAI"];
+
 export function isXAvailable(): boolean {
   return Boolean(process.env.X_BEARER_TOKEN && process.env.X_BEARER_TOKEN.trim());
 }
@@ -45,17 +47,25 @@ export function isXAvailable(): boolean {
 export interface FetchTweetOptions {
   sinceHours: number;
   limit: number;
+  minEngagement?: number;
 }
 
-export async function fetchRecentTweets(opts: FetchTweetOptions): Promise<TrendingTweet[]> {
+function engagementScore(m: TrendingTweet["metrics"]): number {
+  return m.like_count + m.retweet_count * 2 + m.reply_count * 1.5 + m.quote_count;
+}
+
+async function runXSearch(
+  query: string,
+  sinceHours: number,
+  maxResults: number
+): Promise<TrendingTweet[]> {
   const token = process.env.X_BEARER_TOKEN?.trim();
   if (!token) return [];
 
-  const from = CURATED_X_ACCOUNTS.map((u) => `from:${u}`).join(" OR ");
-  const start = new Date(Date.now() - opts.sinceHours * 3_600_000).toISOString();
+  const start = new Date(Date.now() - sinceHours * 3_600_000).toISOString();
   const params = new URLSearchParams({
-    query: `(${from}) -is:retweet lang:en`,
-    max_results: String(Math.min(100, Math.max(10, opts.limit * 4))),
+    query,
+    max_results: String(Math.min(100, Math.max(10, maxResults))),
     start_time: start,
     "tweet.fields": "public_metrics,author_id",
     expansions: "author_id",
@@ -75,7 +85,7 @@ export async function fetchRecentTweets(opts: FetchTweetOptions): Promise<Trendi
       includes?: { users?: Array<{ id: string; username: string; name: string }> };
     };
     const users = new Map((json.includes?.users ?? []).map((u) => [u.id, u]));
-    const items = (json.data ?? []).map((t) => {
+    return (json.data ?? []).map((t) => {
       const u = users.get(t.author_id);
       const username = u?.username ?? "unknown";
       return {
@@ -87,12 +97,34 @@ export async function fetchRecentTweets(opts: FetchTweetOptions): Promise<Trendi
         tweet_id: t.id,
       } satisfies TrendingTweet;
     });
-    const score = (m: TrendingTweet["metrics"]) =>
-      m.like_count + m.retweet_count * 2 + m.reply_count * 1.5 + m.quote_count;
-    return items.sort((a, b) => score(b.metrics) - score(a.metrics)).slice(0, opts.limit);
   } catch {
     return [];
   }
+}
+
+export async function fetchRecentTweets(opts: FetchTweetOptions): Promise<TrendingTweet[]> {
+  const minEngagement = opts.minEngagement ?? 200;
+
+  const whitelistQuery = `(${CURATED_X_ACCOUNTS.map((u) => `from:${u}`).join(" OR ")}) -is:retweet lang:en`;
+  const discoveryQuery = `(${DISCOVERY_KEYWORDS.join(" OR ")}) lang:en -is:retweet -is:reply has:links`;
+
+  const [whitelist, discovery] = await Promise.all([
+    runXSearch(whitelistQuery, opts.sinceHours, opts.limit * 4),
+    runXSearch(discoveryQuery, opts.sinceHours, 50),
+  ]);
+
+  const deduped = new Map<string, TrendingTweet>();
+  for (const t of [...whitelist, ...discovery]) {
+    if (!deduped.has(t.tweet_id)) deduped.set(t.tweet_id, t);
+  }
+
+  const filtered = Array.from(deduped.values()).filter(
+    (t) => engagementScore(t.metrics) >= minEngagement
+  );
+
+  return filtered
+    .sort((a, b) => engagementScore(b.metrics) - engagementScore(a.metrics))
+    .slice(0, opts.limit);
 }
 
 export const xTrendingTools = createSdkMcpServer({
@@ -101,15 +133,22 @@ export const xTrendingTools = createSdkMcpServer({
   tools: [
     tool(
       "list_recent_tweets",
-      "Fetch high-signal tweets from a curated AI/ML account list in the last N hours. Returns [] when X_BEARER_TOKEN is unset.",
+      "Fetch high-signal AI/ML tweets from a curated whitelist PLUS open-discovery search, deduped and ranked by engagement (likes + retweets*2 + replies*1.5 + quotes). Drops anything below min_engagement. Returns [] when X_BEARER_TOKEN is unset.",
       {
         since_hours: z.number().min(1).max(72).default(24),
         limit: z.number().min(1).max(20).default(5),
+        min_engagement: z
+          .number()
+          .min(0)
+          .max(100000)
+          .default(200)
+          .describe("Minimum engagement score (likes + retweets*2 + replies*1.5 + quotes). Drops weak tweets."),
       },
       async (args) => {
         const tweets = await fetchRecentTweets({
           sinceHours: args.since_hours,
           limit: args.limit,
+          minEngagement: args.min_engagement,
         });
         return {
           content: [{ type: "text", text: JSON.stringify(tweets, null, 2) }],

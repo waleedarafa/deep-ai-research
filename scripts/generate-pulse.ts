@@ -44,14 +44,30 @@ function normalizeSource(raw: unknown, url: string, fallback: ValidSource = "new
   return SOURCE_ALIASES[raw.toLowerCase().trim()] ?? fallback;
 }
 
+function deriveTitleFromSummary(summary: string): string {
+  const trimmed = (summary ?? "").trim();
+  if (!trimmed) return "";
+  const words = trimmed.split(/\s+/).slice(0, 12).join(" ");
+  return words.length < trimmed.length ? `${words}…` : words;
+}
+
 function normalizeCandidates(cands: Candidate[]): Candidate[] {
-  let fixed = 0;
-  const out = cands.map((c) => {
-    const norm = normalizeSource(c.source as unknown, c.url, "news");
-    if (norm !== c.source) fixed += 1;
-    return { ...c, source: norm };
-  });
-  if (fixed > 0) console.log(`[pulse] normalized ${fixed} candidate source(s) to valid enum`);
+  let fixedSource = 0;
+  let backfilledTitle = 0;
+  const out: Candidate[] = [];
+  for (const c of cands) {
+    const normSource = normalizeSource(c.source as unknown, c.url, "news");
+    if (normSource !== c.source) fixedSource += 1;
+    let title = (c.title ?? "").trim();
+    if (!title) {
+      title = deriveTitleFromSummary(c.summary);
+      if (title) backfilledTitle += 1;
+    }
+    if (!title) continue; // truly nothing — skip rather than fail at insert
+    out.push({ ...c, source: normSource, title });
+  }
+  if (fixedSource > 0) console.log(`[pulse] normalized ${fixedSource} candidate source(s) to valid enum`);
+  if (backfilledTitle > 0) console.log(`[pulse] backfilled ${backfilledTitle} missing title(s) from summary`);
   return out;
 }
 

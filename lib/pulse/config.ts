@@ -1,8 +1,8 @@
 import type { AgentConfig } from "../types/agent";
-import { exaSearchTools } from "../agent/tools";
 import { githubTrendingTools } from "./tools/github-trending";
 import { xTrendingTools } from "./tools/x-trending";
 import { hnTrendingTools } from "./tools/hn-trending";
+import { hfPapersTools } from "./tools/hf-papers";
 import { pulseSubagents } from "./subagents";
 
 export interface PulseConfigInput {
@@ -45,7 +45,7 @@ Return ONLY this JSON, no prose. The calling script handles ranking and DB write
     },
     settingSources: ["project"],
     mcpServers: {
-      "exa-search": exaSearchTools,
+      "hf-papers": hfPapersTools,
       "github-trending": githubTrendingTools,
       "x-trending": xTrendingTools,
       "hn-trending": hnTrendingTools,
@@ -54,8 +54,7 @@ Return ONLY this JSON, no prose. The calling script handles ranking and DB write
     allowedTools: [
       "Task",
       "Read",
-      "mcp__exa-search__search",
-      "mcp__exa-search__get_contents",
+      "mcp__hf-papers__list_daily_papers",
       "mcp__github-trending__list_trending",
       "mcp__x-trending__list_recent_tweets",
       "mcp__hn-trending__list_trending",
